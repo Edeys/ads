@@ -3,7 +3,12 @@
   "identifier": "default",
   "description": "Quyền tối thiểu cho cửa sổ chính (splash + webview trỏ tới server local). remote.urls cho phép webview tải từ server local gọi IPC (vd mở trình duyệt hệ thống cho Google OAuth).",
   "windows": ["main"],
-  "permissions": ["core:default", "allow-open-external"],
+  "permissions": [
+    "core:default",
+    "allow-open-external",
+    "allow-check-update",
+    "allow-install-update"
+  ],
   "remote": {
     "urls": [
       "http://127.0.0.1:3210/*",

@@ -9,7 +9,11 @@ fn main() {
     // Bắt buộc: webview tải từ origin remote (http://127.0.0.1:3210) nên lệnh IPC
     // của app bị ACL chặn nếu không có permission tương ứng.
     let attributes = tauri_build::Attributes::new()
-        .app_manifest(tauri_build::AppManifest::new().commands(&["open_external"]));
+        .app_manifest(tauri_build::AppManifest::new().commands(&[
+            "open_external",
+            "check_update",
+            "install_update",
+        ]));
 
     tauri_build::try_build(attributes).expect("failed to run tauri-build");
 }

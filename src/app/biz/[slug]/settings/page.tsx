@@ -6,6 +6,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getMembership } from "@/lib/guard";
 import { PRICING } from "@/lib/pricing";
 import { IconArrowRight, IconLayers, IconPlug, IconSparkle } from "../dashboard/icons";
+import { DesktopUpdateSection } from "./desktop-update";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,8 @@ export default async function SettingsOverviewPage({ params }: { params: Promise
           );
         })}
       </div>
+
+      <DesktopUpdateSection />
 
       <section className="ui-card ui-card-pad mt-3">
         <h2 className="ui-h2">Ứng dụng OAuth</h2>

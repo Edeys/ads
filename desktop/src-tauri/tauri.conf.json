@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AdsSync",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "vn.adsync.desktop",
   "build": {
     "frontendDist": "../ui"
@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "publisher": "AdsSync",
     "copyright": "AdsSync contributors",
     "category": "Business",
@@ -46,6 +47,14 @@
         "installMode": "currentUser",
         "languages": ["Vietnamese", "English"]
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwMDFGOTQ1RDJDMTAwRTAKUldUZ0FNSFNSZmtCZ09WMEd6Z1QxbDB1OEI2WHlVOCtKanFZbjBZR3Y3ck9zUzZKblhlSWJlNHcK",
+      "endpoints": [
+        "https://github.com/Edeys/ads/releases/latest/download/latest.json"
+      ]
     }
   }
 }
