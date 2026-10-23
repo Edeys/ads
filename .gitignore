@@ -1,7 +1,12 @@
 node_modules
 .next
 .env
-.env.local
+.env.*
+!.env.example
+*.env
+oauth.env
+secret.txt
+client_secret*.json
 *.log
 .pgdata
 
@@ -31,11 +36,16 @@ scripts/parity-inventory.mjs
 scripts/ui-diff.mjs
 scripts/ui-parity.mjs
 
-# Khoá ký auto-update — tuyệt đối không commit
+# Khoá ký auto-update & certificates — tuyệt đối không commit
 updater.key
 updater.key.pub
+updater.key.password
 *.key
+*.password
 *.sig
+*.pem
+*.pfx
+*.p12
 
 # Tệp tạm
 .tmp-*
