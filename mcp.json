@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "adsync": {
+      "url": "https://mcp.done.vn/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DONE_VN_MCP_TOKEN}"
+      }
+    }
+  }
+}

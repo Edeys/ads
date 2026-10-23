@@ -1,0 +1,365 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------ *
+ * Design tokens
+ *
+ * Nguyên tắc:
+ *  - Nền app phẳng, tĩnh. Card nổi nhờ viền + shadow rất nhẹ, không nhờ
+ *    gradient. Ở theme sáng, nền xanh nhạt + card trắng + sidebar xanh nhạt
+ *    tạo 3 tầng xanh cạnh tranh, mọi thứ bị loè.
+ *  - Một thang chữ xám (slate) cho mọi thứ. Không dùng màu riêng cho từng
+ *    vai trò, trừ khi vai trò mang ý nghĩa trạng thái.
+ *  - Theme tối phải đọc được y như theme sáng: nền sâu, card nhấc hơn nền
+ *    một chút, chữ sáng nhưng không chói.
+ *  - Bo góc vừa phải (14px card, 10px control) — 18px trông như bản web cũ.
+ * ------------------------------------------------------------------ */
+
+:root {
+  /* Nền & bề mặt */
+  --app-bg: #f4f6fa;
+  --sidebar-bg: #ffffff;
+  --card: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #eef2f7;
+  --row-hover: #f8fafc;
+
+  /* Viền */
+  --line: #e6eaf0;
+  --line-strong: #d7dde6;
+
+  /* Chữ */
+  --ink-900: #0f172a;
+  --ink-800: #1e293b;
+  --ink-700: #334155;
+  --ink-600: #475569;
+  --ink-500: #64748b;
+  --ink-400: #94a3b8;
+  --ink-300: #cbd5e1;
+
+  /* Thương hiệu */
+  --brand: #2563eb;
+  --brand-600: #1d4ed8;
+  --brand-soft: #eff6ff;
+  --brand-softer: #f8fafc;
+  --brand-ring: rgba(37, 99, 235, 0.16);
+
+  /* Trạng thái */
+  --ok-bg: #ecfdf5;
+  --ok-ink: #047857;
+  --warn-bg: #fffbeb;
+  --warn-ink: #b45309;
+  --danger-bg: #fef2f2;
+  --danger-ink: #b91c1c;
+  --info-bg: #eff6ff;
+  --info-ink: #1d4ed8;
+
+  /* Bo góc & đổ bóng */
+  --radius-card: 14px;
+  --radius-ctl: 10px;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -14px rgba(15, 23, 42, 0.16);
+  --shadow-pop: 0 12px 32px -12px rgba(15, 23, 42, 0.24);
+  --shadow-ctl: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="dark"] {
+  --app-bg: #0b1120;
+  --sidebar-bg: #0e1626;
+  --card: #131e33;
+  --surface: #131e33;
+  --surface-2: #18243c;
+  --surface-3: #1e2b45;
+  --row-hover: #17233a;
+
+  --line: #1f2c42;
+  --line-strong: #2b3a54;
+
+  --ink-900: #e6edf8;
+  --ink-800: #d3dded;
+  --ink-700: #bcc8dc;
+  --ink-600: #a5b2c8;
+  --ink-500: #8b99b1;
+  --ink-400: #71809a;
+  --ink-300: #56637a;
+
+  --brand: #4f8ef7;
+  --brand-600: #6ba1ff;
+  --brand-soft: #16294a;
+  --brand-softer: #131f36;
+  --brand-ring: rgba(79, 142, 247, 0.24);
+
+  --ok-bg: #0f2c1f;
+  --ok-ink: #58d19a;
+  --warn-bg: #2e2410;
+  --warn-ink: #eab54b;
+  --danger-bg: #331618;
+  --danger-ink: #f78383;
+  --info-bg: #16294a;
+  --info-ink: #7fb0ff;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -16px rgba(0, 0, 0, 0.7);
+  --shadow-pop: 0 16px 40px -14px rgba(0, 0, 0, 0.8);
+  --shadow-ctl: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+html,
+body {
+  background-color: var(--app-bg);
+  color: var(--ink-900);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tiêu đề tab của cửa sổ desktop theo màu app */
+@media (display-mode: browser) {
+  :root {
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  /* ---------- Card ---------- */
+  .ui-card {
+    @apply rounded-[14px] border;
+    background: var(--card);
+    border-color: var(--line);
+    box-shadow: var(--shadow-card);
+  }
+
+  .ui-card-pad {
+    @apply p-5 md:p-6;
+  }
+
+  /* Card phẳng hơn cho vùng chứa bảng — bảng có viền riêng nên card thừa bóng. */
+  .ui-panel {
+    @apply rounded-[14px] border;
+    background: var(--card);
+    border-color: var(--line);
+  }
+
+  /* ---------- Chữ ---------- */
+  .ui-h1 {
+    color: var(--ink-900);
+    font-size: 24px;
+    line-height: 1.25;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+
+  .ui-h2 {
+    color: var(--ink-800);
+    font-size: 16px;
+    line-height: 1.4;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  .ui-sub {
+    color: var(--ink-500);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .ui-label {
+    color: var(--ink-500);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Nhãn nhóm nhỏ, dùng cho tiêu đề cột bảng và mục con. */
+  .ui-overline {
+    color: var(--ink-400);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* ---------- Nút ---------- */
+  .ui-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] border px-3.5 py-2 text-[13.5px] font-semibold transition-colors;
+    border-color: var(--line-strong);
+    color: var(--ink-700);
+    background: var(--surface);
+    box-shadow: var(--shadow-ctl);
+  }
+
+  .ui-btn:hover {
+    background: var(--surface-2);
+    border-color: var(--line-strong);
+  }
+
+  .ui-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-3.5 py-2 text-[13.5px] font-semibold text-white transition-colors;
+    background: var(--brand);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  }
+
+  .ui-btn-primary:hover {
+    background: var(--brand-600);
+  }
+
+  .ui-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-3 py-1.5 text-[13px] font-semibold transition-colors;
+    color: var(--ink-600);
+  }
+
+  .ui-btn-ghost:hover {
+    background: var(--surface-3);
+    color: var(--ink-800);
+  }
+
+  .ui-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] border px-3.5 py-2 text-[13.5px] font-semibold transition-colors;
+    border-color: var(--danger-bg);
+    color: var(--danger-ink);
+    background: var(--danger-bg);
+  }
+
+  /* ---------- Chip ---------- */
+  .ui-chip {
+    @apply inline-flex items-center gap-1.5 rounded-[8px] px-2 py-[3px] text-[11.5px] font-semibold;
+    background: var(--surface-3);
+    color: var(--ink-600);
+  }
+
+  .ui-chip-brand {
+    @apply inline-flex items-center gap-1.5 rounded-[8px] px-2 py-[3px] text-[11.5px] font-semibold;
+    background: var(--brand-soft);
+    color: var(--brand);
+  }
+
+  /* ---------- Input ---------- */
+  .ui-input {
+    @apply w-full rounded-[10px] border px-3 py-2 text-[13.5px] outline-none transition-shadow;
+    background: var(--surface);
+    border-color: var(--line-strong);
+    color: var(--ink-900);
+  }
+
+  .ui-input::placeholder {
+    color: var(--ink-400);
+  }
+
+  .ui-input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-ring);
+  }
+
+  /* ---------- Bảng ---------- */
+  .ui-table {
+    @apply w-full border-collapse text-left text-[13.5px];
+  }
+
+  .ui-table thead th {
+    color: var(--ink-400);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    background: var(--surface-2);
+  }
+
+  .ui-table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-700);
+    vertical-align: middle;
+  }
+
+  .ui-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .ui-table tbody tr:hover {
+    background: var(--row-hover);
+  }
+
+  /* ---------- Trạng thái rỗng / tải ---------- */
+  .ui-empty {
+    @apply flex flex-col items-center justify-center px-6 py-14 text-center;
+  }
+
+  .ui-skeleton {
+    @apply rounded-md;
+    background: linear-gradient(90deg, #eef2f7 25%, #e4eaf2 37%, #eef2f7 63%);
+    background-size: 400% 100%;
+    animation: ui-shimmer 1.4s ease infinite;
+  }
+
+  [data-theme="dark"] .ui-skeleton {
+    background: linear-gradient(90deg, #1b2740 25%, #22314e 37%, #1b2740 63%);
+    background-size: 400% 100%;
+  }
+}
+
+@keyframes ui-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+/* Thanh cuộn mảnh */
+.ui-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.ui-scroll::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+.ui-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-300);
+}
+.ui-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Ẩn thanh cuộn ngang của vùng chip lọc */
+.ui-scroll-x {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ui-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* Lớp phủ cho các class Tailwind còn dùng màu cứng.
+   Selector có attribute nên specificity cao hơn utility của Tailwind. */
+[data-theme="dark"] .bg-white {
+  background-color: var(--card);
+}
+[data-theme="dark"] .bg-zinc-50,
+[data-theme="dark"] .bg-zinc-100 {
+  background-color: var(--surface-3);
+}
+[data-theme="dark"] .text-zinc-500 {
+  color: var(--ink-500);
+}
+[data-theme="dark"] .text-zinc-900 {
+  color: var(--ink-900);
+}
+[data-theme="dark"] .border-zinc-200,
+[data-theme="dark"] .border-zinc-300 {
+  border-color: var(--line-strong);
+}
+[data-theme="dark"] .border {
+  border-color: var(--line);
+}
+[data-theme="dark"] .shadow-sm {
+  box-shadow: var(--shadow-card);
+}

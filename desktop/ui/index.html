@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdsSync</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg1: #eaf2ff;
+        --bg2: #f6faff;
+        --ink: #0d1b2a;
+        --muted: #64748b;
+        --brand: #0b6bff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg1: #0a1421;
+          --bg2: #0f1d2e;
+          --ink: #e6eefb;
+          --muted: #8fa3bd;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: grid;
+        place-items: center;
+        background: radial-gradient(120% 120% at 20% 10%, var(--bg1), var(--bg2));
+        color: var(--ink);
+        font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+        overflow: hidden;
+      }
+      .card { display: grid; justify-items: center; gap: 14px; padding: 32px; }
+      .logo {
+        width: 76px; height: 76px; border-radius: 20px;
+        background: linear-gradient(160deg, #1a7aff, #073eb0);
+        display: grid; place-items: center;
+        box-shadow: 0 18px 40px -18px rgba(11, 107, 255, 0.85);
+      }
+      .logo svg { width: 40px; height: 40px; }
+      h1 { margin: 6px 0 0; font-size: 20px; letter-spacing: -0.01em; }
+      p { margin: 0; color: var(--muted); font-size: 13px; }
+      .bar {
+        width: 220px; height: 4px; border-radius: 999px; overflow: hidden;
+        background: color-mix(in srgb, var(--brand) 16%, transparent);
+      }
+      .bar > i {
+        display: block; height: 100%; width: 38%; border-radius: 999px;
+        background: var(--brand);
+        animation: slide 1.25s ease-in-out infinite;
+      }
+      @keyframes slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(300%); }
+      }
+      #err {
+        display: none; max-width: 520px; text-align: center;
+        padding: 12px 14px; border-radius: 12px;
+        background: color-mix(in srgb, #d92d20 12%, transparent);
+        color: #b42318; font-size: 12.5px; white-space: pre-wrap;
+      }
+      @media (prefers-color-scheme: dark) { #err { color: #ffb4ab; } }
+      .hint { font-size: 12px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 19 12 5l6 14" />
+          <path d="M8.6 14h6.8" />
+        </svg>
+      </div>
+      <h1>AdsSync</h1>
+      <p id="status">Đang khởi động máy chủ dữ liệu…</p>
+      <div class="bar"><i></i></div>
+      <div id="err"></div>
+      <p class="hint">Dữ liệu lưu tại %APPDATA%\AdsSync</p>
+    </div>
+    <script>
+      window.__adsyncTick = function (secs) {
+        if (secs > 0) document.getElementById("status").textContent = "Đang khởi động máy chủ dữ liệu… " + secs + "s";
+      };
+      window.__adsyncError = function (msg) {
+        var box = document.getElementById("err");
+        box.textContent = String(msg);
+        box.style.display = "block";
+        document.getElementById("status").textContent = "Không khởi động được máy chủ";
+        var bar = document.querySelector(".bar");
+        if (bar) bar.style.display = "none";
+      };
+    </script>
+  </body>
+</html>

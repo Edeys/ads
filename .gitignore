@@ -1,0 +1,58 @@
+node_modules
+.next
+.env
+.env.local
+*.log
+.pgdata
+
+# Bằng chứng reverse-engineer + dữ liệu tài khoản Done.vn — KHÔNG publish
+captures/
+rea_done_vn/
+.pgdata.bak
+.pgdata.bak2
+
+# Tài liệu reverse-engineer / spec của bên thứ ba — không đưa lên repo public
+DONE_VN_SPEC.md
+RE_CLONE_PLAN.md
+PARITY.md
+PLAN.md
+MCP_CONFIG.md
+desktop/PLAN-2026-10-22.md
+docs/superpowers/
+scripts/data/
+scripts/capture/
+scripts/fetch_done_vn_manifest.mjs
+scripts/inspect_done_vn_chunks.mjs
+scripts/extract_all_guides.mjs
+scripts/extract_all_tools.mjs
+scripts/extract_symbols.mjs
+scripts/extract_vietnamese_texts.mjs
+scripts/parity-inventory.mjs
+scripts/ui-diff.mjs
+scripts/ui-parity.mjs
+
+# Khoá ký auto-update — tuyệt đối không commit
+updater.key
+updater.key.pub
+*.key
+*.sig
+
+# Tệp tạm
+.tmp-*
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# Desktop build output (sinh bởi desktop/prepare.mjs)
+desktop/src-tauri/resources/
+desktop/src-tauri/binaries/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/node_modules/
+.next/standalone/
+
+# Media nặng / tạm
+media/
+dev.log
+dev-out.log
+driz
