@@ -1,31 +1,33 @@
-# AdsSync
+# AdsSync — All-In-One Marketing & Growth OS
 
-Ứng dụng **quản trị & tự động hoá quảng cáo đa kênh, self-hosted**: kéo chỉ số thật từ
-Meta / TikTok / Google / OpenAI Ads, đặt luật Ads Autopilot, soạn quảng cáo nhanh, và mở
-**MCP server nội bộ** để AI (Claude, Cursor, …) làm việc trên dữ liệu của bạn.
+[![Release](https://img.shields.io/github/v/release/Edeys/ads?label=Desktop%20Release)](https://github.com/Edeys/ads/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
+[![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8D8)](https://tauri.app/)
+[![Local-First](https://img.shields.io/badge/Architecture-Local--First%20%7C%20PGlite-brightgreen)](ARCHITECTURE.md)
+
+Nền tảng **Marketing All-In-One, Tự động hóa tăng trưởng (Growth OS) & Quản trị đa kênh, Self-Hosted & Local-First**: Quản lý chiến dịch quảng cáo (Meta, TikTok, Google), xây dựng cụm chủ đề Topical Authority (Blog/SEO), xuất bản đa nền tảng CMS, tự động hóa nội dung đa kênh, phân bổ doanh thu thực tế Server-Side CAPI, và vận hành trợ lý AI qua giao thức **Model Context Protocol (MCP Server)**.
 
 Chạy được hai kiểu:
 
-- **Web self-host**: Next.js 15 + PGlite (không cần cài Postgres).
-- **Desktop**: Tauri 2, dữ liệu trong `%APPDATA%\AdsSync`, không cần cài Node.
+- **Web self-host**: Next.js 15 + PGlite WASM (không cần cài PostgreSQL bên ngoài).
+- **Desktop**: Tauri 2, dữ liệu nằm trong `%APPDATA%\AdsSync`, tự động cập nhật 1-click qua GitHub Releases.
 
-> Mọi lệnh **ghi** lên tài khoản quảng cáo thật đều đi qua **Approval Gate** (owner duyệt
-> trong app) và mặc định bị chặn ở chế độ mock. Đây là điểm khác biệt cốt lõi so với các
-> công cụ "cho AI toàn quyền".
+> Mọi lệnh **ghi** lên tài khoản quảng cáo thật hoặc xuất bản tự động đều đi qua **Approval Gate** (owner duyệt trong app) và mặc định chạy an toàn. Đây là điểm khác biệt cốt lõi so với các công cụ "cho AI toàn quyền".
 
 ---
 
-## Tính năng
+## Tính năng cốt lõi
 
 | Nhóm | Nội dung |
 | --- | --- |
-| **Chỉ số** | 32 chỉ số hợp nhất (13 Meta · 8 TikTok · 6 Google · 5 OpenAI Ads), đổi cột hiển thị, gộp nhiều TKQC, so sánh kỳ trước |
-| **Ads Autopilot** | Luật tự tắt theo ngưỡng CPA, kéo chỉ số theo lịch, tăng/giảm ngân sách, tự chạy lại khi lỗi |
-| **Quick Ads** | Quét bài viết của Page → chọn mẫu → phát hành (mock mặc định) |
-| **MCP server** | Endpoint `POST /mcp?key=…`, JSON-RPC, scope theo key, Bộ chỉ số để cắt payload, Skill Hub |
-| **Tool SDK** | Khai báo **custom tool HTTP** bằng manifest, AI gọi được qua MCP, tool có side effect phải duyệt |
-| **Cộng tác** | Biz nhiều thành viên, 18 quyền chi tiết, lời mời, nhật ký thao tác 30 ngày |
-| **Vận hành** | Thông báo, hỗ trợ, gói cước/hạn mức, webhook ra n8n, publisher bài viết, bình luận Facebook |
+| **Content & SEO Hub** | Cụm chủ đề Topic Clusters (Hub & Spoke), bộ tính điểm On-page SEO tức thì, kết nối xuất bản 1-click sang WordPress REST API, Ghost, Webflow & Webhook. |
+| **Chỉ số quảng cáo** | 32 chỉ số hợp nhất (13 Meta · 8 TikTok · 6 Google · 5 OpenAI Ads), gộp nhiều TKQC, so sánh kỳ trước theo thời gian thực. |
+| **Ads Autopilot** | Luật tự động tắt theo ngưỡng CPA (Stop-loss), tăng/giảm ngân sách theo khung giờ vàng (Surf scaling), cảnh báo mỏi quảng cáo (Creative Fatigue). |
+| **Server-Side CAPI** | Webhook tiếp nhận đơn hàng thực tế (Shopify, Pancake, Haravan), mã hóa băm SHA-256 bắn ngược về Meta CAPI & Google Offline Conversions. |
+| **MCP Server (AI Hub)**| Endpoint `POST /mcp?key=…` chuẩn OAuth 2.1 + PKCE, cung cấp 27+ marketing tools cho Claude Desktop, Cursor, ChatGPT. |
+| **Cập nhật Desktop 1-Click** | Tự động kiểm tra bản phát hành mới qua GitHub Releases, xác thực chữ ký số Minisign, tự động tải và cập nhật không gián đoạn. |
+| **Cộng tác & Phân quyền** | Hỗ trợ nhiều Workspace (Biz), 18 quyền hạn chi tiết, lời mời thành viên, nhật ký thao tác (Audit log) 30 ngày. |
 
 ---
 
@@ -33,21 +35,20 @@ Chạy được hai kiểu:
 
 ```
 Next.js 15 (App Router, RSC + Route Handlers)
-├── UI: Tailwind + Radix primitives
+├── UI: Tailwind + Radix primitives + Content Editor
 ├── DB: PGlite (embedded Postgres WASM) qua Drizzle ORM   → ./.pgdata hoặc %APPDATA%\AdsSync
 ├── Worker: scheduler chạy TRONG process server (tick 30s · health 15m · social 60s)
-├── MCP: /mcp (JSON-RPC, stateless) + Approval Gate
-└── Desktop: Tauri 2 shell → spawn Node sidecar chạy Next standalone
+├── MCP: /mcp (OAuth 2.1, JSON-RPC, stateless) + Approval Gate
+└── Desktop: Tauri 2 shell → spawn Node sidecar chạy Next standalone + Auto-updater (Minisign)
 ```
 
 > 📖 **Xem chi tiết sơ đồ luồng, phân rã thư mục và thiết kế tại [ARCHITECTURE.md](ARCHITECTURE.md).**
 
-Vì PGlite chỉ cho **một process** mở thư mục dữ liệu, scheduler không chạy thành process
-riêng. Muốn tách worker: đặt `DATABASE_URL` trỏ tới Postgres thật rồi chạy `npm run worker`.
+Vì PGlite chỉ cho **một process** mở thư mục dữ liệu, scheduler không chạy thành process riêng. Muốn tách worker độc lập: đặt `DATABASE_URL` trỏ tới Postgres thật rồi chạy `npm run worker`.
 
 ---
 
-## Chạy nhanh (web)
+## Chạy nhanh (Web)
 
 Yêu cầu: Node.js ≥ 20.
 
@@ -61,119 +62,26 @@ npm run dev                 # http://localhost:3000
 
 Đăng nhập dev: `dev@local.test` → vào `/biz/my-biz/dashboard`.
 
-### Kết nối tài khoản quảng cáo
-
-Điền các biến trong `.env` (`META_APP_ID`, `TIKTOK_APP_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, …)
-rồi vào **Kết nối** trong app để OAuth. Không có credential thật thì app vẫn chạy ở chế độ
-mock (số liệu sinh tự động, mọi write bị chặn).
-
 ---
 
-## Chạy desktop
+## Chạy & Cập nhật Desktop
 
 ```bash
-npm run desktop:dev        # build standalone + mở cửa sổ app (không cần Rust)
+npm run desktop:dev        # build standalone + mở cửa sổ app (không cần cài Rust)
 ```
 
-Bản cài đặt `.exe` cần Rust: xem [`desktop/README.md`](desktop/README.md).
+### Cập nhật phiên bản mới 1-click trên Desktop:
+- Vào **Cài đặt Biz** hoặc bấm nút **Cập nhật v0.2.0** ở chân thanh Sidebar.
+- Bấm **"Kiểm tra cập nhật"**: App tự động truy vấn GitHub Releases `latest.json`.
+- Khi có bản mới: Bấm **"Cài đặt & Khởi động lại"**, ứng dụng sẽ tự động tải bản nén `.nsis.zip`, kiểm tra chữ ký Minisign và cài đặt ngầm.
+
+Bản cài đặt `.exe` cần Rust: xem chi tiết tại [`desktop/README.md`](desktop/README.md).
 
 ---
 
-## MCP server nội bộ
+## Đóng góp & Phát triển mã nguồn mở
 
-1. Vào **API key MCP** → tạo key (chọn scope từng nền tảng + quyền ghi).
-2. Trỏ client MCP vào:
-
-```json
-{
-  "mcpServers": {
-    "adsync": {
-      "url": "http://localhost:3000/mcp?key=mcp_xxx"
-    }
-  }
-}
-```
-
-Tool đọc chạy ngay; tool ghi (tắt/bật, đổi ngân sách, đăng bài, reply comment, custom tool
-có side effect) trả `pending_approval` và chờ owner duyệt tại **Nhật ký phê duyệt**.
-
-### Tool SDK (custom tool)
-
-Khai báo tại **Custom tools** (hoặc `POST /api/biz/:slug/custom-tools`):
-
-```json
-{
-  "name": "crm_lookup_order",
-  "description": "Tra cứu đơn hàng theo mã",
-  "method": "GET",
-  "url": "https://crm.example.com/api/orders/{{order_id}}",
-  "headers": { "x-api-key": "{{api_key}}" },
-  "inputSchema": {
-    "type": "object",
-    "properties": { "order_id": { "type": "string" }, "api_key": { "type": "string" } },
-    "required": ["order_id", "api_key"]
-  },
-  "requiresApproval": false
-}
-```
-
-Chỉ hỗ trợ HTTP — app không chạy code tuỳ ý từ manifest.
-
----
-
-## An toàn
-
-| Cơ chế | Cách hoạt động |
-| --- | --- |
-| Mock mặc định | `ADSYNC_MOCK=1` (desktop luôn bật) — không có request ghi nào ra ngoài |
-| Ghi thật | cần `ADSYNC_REAL_WRITES=1` **và** approval đã duyệt |
-| Scope key | mỗi MCP key giới hạn theo nền tảng, quyền ghi, danh sách tool, skill được gắn |
-| Audit | mọi lần chạy tool/approval ghi vào `activity_logs` (30 ngày) |
-| Bind local | server chỉ nghe `127.0.0.1`, desktop chọn cổng ngẫu nhiên |
-
-Chi tiết + cách báo lỗi: [`SECURITY.md`](SECURITY.md).
-
----
-
-## Cấu trúc repo
-
-```
-src/app/            # route + UI (App Router)
-src/app/api/        # REST API (biz-scoped, guard theo permission)
-src/app/mcp/        # MCP endpoint JSON-RPC
-src/mcp/            # registry tool + Approval Gate dispatcher
-src/lib/            # tích hợp Meta/TikTok/Google/Pancake, ad-metrics, custom-tools…
-src/db/             # schema Drizzle + seed
-src/worker/         # engine autopilot (chạy trong process hoặc process riêng)
-desktop/            # Tauri 2 shell + script đóng gói
-scripts/            # verify_* (API/edge cases), capture/ (đo UI parity)
-drizzle/            # migration SQL
-```
-
----
-
-## Kiểm thử
-
-```bash
-node scripts/verify_custom_tools.mjs   # Tool SDK + MCP + approval (19 case)
-node scripts/verify_configs.mjs        # Configs/autopilot
-node scripts/verify_shell_apis.mjs     # billing/members/notifications…
-node scripts/verify_quick_ads.mjs      # Quick Ads
-node scripts/verify_ad_metrics.ts      # Ad metrics contract
-```
-
-Các script cần server đang chạy ở `http://localhost:3000` (đổi bằng `LOCAL_BASE`).
-
----
-
-## Ghi chú về Done.vn
-
-Repo này là **bản tự phát triển lại** (clean-room reimplementation) lấy cảm hứng từ luồng
-nghiệp vụ của một sản phẩm SaaS quảng cáo. Không chứa JS/CSS/asset/logo/nội dung copy từ
-sản phẩm đó; tên thương hiệu, câu chữ và dữ liệu trong app là của riêng dự án này.
-
----
-
-## Giấy phép
-
-[MIT](LICENSE).
+Dự án phát triển theo mô hình Open-Source Production. Vui lòng đọc:
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): Hướng dẫn thiết lập môi trường, quy chuẩn TypeScript và quy trình gửi Pull Request.
+- [`SECURITY.md`](SECURITY.md): Chính sách báo cáo lỗ hổng bảo mật và bảo vệ bí mật người dùng.
+- [`LICENSE`](LICENSE): Giấy phép phần mềm mã nguồn mở MIT.

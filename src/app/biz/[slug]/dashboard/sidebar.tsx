@@ -54,6 +54,17 @@ const navFor = (slug: string): Group[] => [
     ],
   },
   {
+    key: "content",
+    label: "Content & SEO Hub",
+    Icon: IconBook,
+    items: [
+      { label: "Cụm chủ đề (Clusters)", href: `/biz/${slug}/dashboard/content?tab=clusters` },
+      { label: "Bài viết & SEO", href: `/biz/${slug}/dashboard/content?tab=posts` },
+      { label: "Website CMS", href: `/biz/${slug}/dashboard/content?tab=sites` },
+      { label: "Ma trận sáng tạo", href: `/biz/${slug}/dashboard/content?tab=creative` },
+    ],
+  },
+  {
     key: "quickads",
     label: "Quảng cáo nhanh",
     Icon: IconMegaphone,
@@ -261,6 +272,19 @@ export function Sidebar({
 
       {/* Chân sidebar */}
       <div className="shrink-0 border-t px-2.5 py-2.5" style={{ borderColor: "var(--line)" }}>
+        {/* Nút kiểm tra cập nhật nhanh cho Desktop */}
+        <Link
+          href={`/biz/${slug}/settings`}
+          className={`mb-1.5 flex h-[32px] items-center gap-2.5 rounded-[9px] px-2.5 text-[13px] font-semibold transition-colors hover:bg-[var(--brand-soft)] ${
+            collapsed ? "justify-center px-0" : ""
+          }`}
+          style={{ color: "var(--brand)" }}
+          title="Kiểm tra cập nhật AdsSync Desktop"
+        >
+          <IconSparkle size={16} />
+          {!collapsed && <span className="truncate">Cập nhật v0.2.0</span>}
+        </Link>
+
         <Link
           href={`/biz/${slug}/settings`}
           className={`mb-1.5 flex h-[32px] items-center gap-2.5 rounded-[9px] px-2.5 text-[13px] font-medium transition-colors hover:bg-[var(--surface-2)] ${
@@ -319,9 +343,6 @@ export function Sidebar({
                   {tokensOut.toLocaleString("vi-VN")}
                 </div>
               </div>
-            </div>
-            <div className="mt-1.5 text-[10.5px]" style={{ color: "var(--ink-400)" }}>
-              Dữ liệu lưu trên máy bạn
             </div>
           </div>
         )}

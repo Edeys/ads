@@ -1,67 +1,28 @@
-# Security Policy
+# Chính sách bảo mật (Security Policy)
 
-## Mô hình tin cậy
+## 1. Phiên bản được hỗ trợ
 
-AdsSync chạy **trên máy của bạn** (web self-host hoặc desktop) và giữ credential của các
-tài khoản quảng cáo. Vì vậy:
+| Phiên bản | Được hỗ trợ cập nhật bảo mật |
+| --- | --- |
+| 0.2.x (Hiện tại) | :white_check_mark: |
+| < 0.2.0 | :x: |
 
-- Server chỉ bind `127.0.0.1`. Không expose ra Internet nếu chưa có reverse proxy + auth.
-- Dữ liệu (PGlite) và secret NextAuth nằm trong thư mục dữ liệu của bạn
-  (mặc định `./.pgdata`, bản desktop `%APPDATA%\AdsSync`).
-- Không có telemetry, không gửi dữ liệu về máy chủ của dự án.
+---
 
-## Hai lớp chặn ghi
+## 2. Báo cáo lỗ hổng bảo mật (Reporting a Vulnerability)
 
-1. **Mock mode** — `ADSYNC_MOCK=1` (bản desktop luôn bật): adapter trả dữ liệu tổng hợp và
-   không thực hiện request ghi nào lên nền tảng.
-2. **Approval Gate** — khi bật ghi thật (`ADSYNC_REAL_WRITES=1`), mọi lệnh ghi đến từ MCP
-   (tắt/bật campaign, đổi ngân sách, đăng bài, reply comment, custom tool có side effect)
-   chỉ tạo bản ghi `mcp_approvals` ở trạng thái `pending`. Owner duyệt trong app thì lệnh
-   mới thực thi; mọi bước được ghi vào `activity_logs` và `mcp_call_logs`.
+Chúng tôi coi trọng việc bảo vệ dữ liệu người dùng và các token OAuth (Meta, Google, TikTok). 
 
-## Custom tools
+Nếu bạn phát hiện bất kỳ lỗ hổng bảo mật nào trong mã nguồn hoặc gói phân phối Desktop:
+- **KHÔNG** tạo issue công khai trên GitHub.
+- Vui lòng gửi email trực tiếp tới nhóm phát triển qua GitHub Security Advisory hoặc email bảo mật của dự án.
+- Cung cấp các bước tái hiện chi tiết (PoC) và tác động dự kiến của lỗ hổng.
 
-Tool SDK chỉ chạy **HTTP request** theo manifest, không `eval`, không chạy shell. Tuy vậy:
+Chúng tôi sẽ xác nhận báo cáo trong vòng 48 giờ và phát hành bản vá bảo mật qua hệ thống Auto-Updater trong thời gian sớm nhất.
 
-- URL/header do người dùng khai báo → chỉ cài tool từ nguồn bạn tin.
-- Tool có side effect nên đặt `requiresApproval: true`.
-- Token nên đặt trong biến môi trường và tham chiếu qua `secretRef`, không dán thẳng vào manifest.
+---
 
-## Hardening bổ sung (22/10/2026)
+## 3. Kiến trúc bảo vệ bí mật trong AdsSync
 
-- **Webhook Meta** bắt buộc `X-Hub-Signature-256` HMAC với `META_APP_SECRET`; payload không
-  ký bị trả 403. Chặn việc giả comment/bài viết để kích hoạt auto-reply hoặc job quảng cáo.
-- **OAuth state** hết hạn sau 10 phút và so sánh chữ ký bằng `timingSafeEqual` (Meta/Google/TikTok).
-- **MCP OAuth** bắt buộc PKCE `S256`; DCR và token endpoint có rate limit trong bộ nhớ.
-- **Custom tools** kiểm tra SSRF trước khi gọi: chặn localhost, IP private/link-local, metadata
-  cloud và DNS trỏ về IP nội bộ; không tự động theo redirect. Bật
-  `ADSYNC_ALLOW_PRIVATE_TOOLS=1` nếu thật sự cần endpoint nội bộ.
-- **Skill zip** giới hạn 2MB sau giải nén và kiểm tra biên offset — chống zip bomb/archive hỏng.
-- **Bootstrap và auth bridge** chỉ nhận request loopback (kể cả khi có header proxy), tránh lộ
-  seed/session qua tunnel.
-- **Health** không trả `pid`/`data_dir` cho request không phải loopback.
-- **Secret NextAuth** không còn nằm trong `.env` đóng gói; shell desktop sinh và lưu riêng.
-- **Migration** tự sao lưu PGlite (`%APPDATA%\AdsSync.bak`) trước khi áp migration mới.
-- **Log** xoay vòng khi vượt 10MB; fetch ra provider có timeout mặc định 20s.
-- **Backup thủ công**: `Cài đặt → Dữ liệu của bạn → Tải bản sao lưu` (chỉ owner, PGlite).
-
-## Chưa đạt mức production đầy đủ
-
-- Installer chưa **code-sign** (Windows SmartScreen sẽ cảnh báo).
-- Chưa có **auto-update** và **tray**; cần server phát hành + chứng chỉ ký.
-- Chưa có rate limit phân tán, audit log chống sửa, và HA — phù hợp self-host một máy.
-- Nếu mở qua tunnel, phải đặt reverse proxy có HTTPS + auth; các endpoint desktop đã chặn
-  loopback nhưng MCP/OAuth vẫn nên được bảo vệ thêm ở tầng proxy.
-- Một cảnh báo PostCSS trong dependency của Next 15 chưa nâng lên Next 16 (breaking change);
-  app không xử lý CSS do người dùng nhập nên không khai thác được trong luồng hiện tại.
-
-## Báo lỗi
-
-Mở issue riêng tư hoặc email cho maintainer kèm: phiên bản, route, cách tái hiện, và mức độ
-ảnh hưởng (đọc dữ liệu / ghi tài khoản / RCE). Vui lòng **không** đăng credential thật,
-token MCP hay ảnh chụp tài khoản quảng cáo trong issue công khai.
-
-## Phạm vi không xử lý
-
-- Máy đã bị compromise (malware đọc `%APPDATA%`) — ngoài phạm vi.
-- Người dùng tự đặt `ADSYNC_MOCK=0` + `ADSYNC_REAL_WRITES=1` rồi duyệt lệnh sai.
+- AdsSync tuân thủ mô hình **Local-First**: Mọi token và secret người dùng (`secret.txt`, `oauth.env`) được lưu trữ tại máy cục bộ của người dùng (`%APPDATA%\AdsSync\`) và **không bao giờ** được gửi về bất kỳ máy chủ trung gian nào.
+- Các bản cập nhật Desktop Installer được ký số bằng thuật toán mã hóa **Minisign**, bảo vệ người dùng khỏi các cuộc tấn công giả mạo (Man-in-the-middle).

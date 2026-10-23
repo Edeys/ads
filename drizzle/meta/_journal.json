@@ -64,6 +64,13 @@
       "when": 1792667699428,
       "tag": "0008_mcp_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792734078208,
+      "tag": "0009_boring_spitfire",
+      "breakpoints": true
     }
   ]
 }

@@ -545,3 +545,131 @@ export const mcpOauthCodes = pgTable("mcp_oauth_codes", {
   usedAt: timestamp("used_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ============================================================================
+// ALL-IN-ONE MARKETING OS: CONTENT, SITES, CREATIVE & ATTRIBUTION
+// ============================================================================
+
+// ---------- 1. Sites / Headless CMS Destinations ----------
+export const sites = pgTable("sites", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bizId: uuid("biz_id").references(() => bizs.id, { onDelete: "cascade" }).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  type: varchar("type", { length: 40 }).notNull(), // wordpress|ghost|webflow|webhook|custom
+  endpointUrl: text("endpoint_url").notNull(),
+  authType: varchar("auth_type", { length: 40 }).default("application_password").notNull(), // application_password|bearer|api_key
+  credentialsEnc: text("credentials_enc").notNull(), // encrypted JSON { username, appPassword, token }
+  meta: jsonb("meta").$type<Record<string, unknown>>().default({}).notNull(), // defaultCategory, authorId, customHeaders
+  status: varchar("status", { length: 20 }).default("active").notNull(), // active|disabled|error
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [index("sites_biz").on(t.bizId)]);
+
+// ---------- 2. Topical Clusters (SEO Topic Clusters & Pillar Map) ----------
+export const topicClusters = pgTable("topic_clusters", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bizId: uuid("biz_id").references(() => bizs.id, { onDelete: "cascade" }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  pillarKeyword: varchar("pillar_keyword", { length: 200 }).notNull(),
+  searchVolume: integer("search_volume").default(0),
+  intent: varchar("intent", { length: 40 }).default("informational").notNull(), // informational|commercial|transactional|navigational
+  status: varchar("status", { length: 20 }).default("planning").notNull(), // planning|in_progress|completed
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [index("topic_clusters_biz").on(t.bizId, t.status)]);
+
+// ---------- 3. Posts (Blog & Content Hub) ----------
+export const posts = pgTable("posts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bizId: uuid("biz_id").references(() => bizs.id, { onDelete: "cascade" }).notNull(),
+  clusterId: uuid("cluster_id").references(() => topicClusters.id, { onDelete: "set null" }),
+  postType: varchar("post_type", { length: 30 }).default("cluster").notNull(), // pillar|cluster|landing_page|ad_landing
+  title: varchar("title", { length: 300 }).notNull(),
+  slug: varchar("slug", { length: 300 }).notNull(),
+  contentMarkdown: text("content_markdown").notNull(),
+  contentHtml: text("content_html"),
+  excerpt: text("excerpt"),
+  featuredImageUrl: text("featured_image_url"),
+  
+  // Advanced On-page SEO & EEAT
+  seoScore: integer("seo_score").default(0), // 0-100
+  metaTitle: varchar("meta_title", { length: 160 }),
+  metaDescription: varchar("meta_description", { length: 320 }),
+  focusKeywords: jsonb("focus_keywords").$type<string[]>().default([]).notNull(),
+  schemaGraph: jsonb("schema_graph").$type<Record<string, unknown>>().default({}).notNull(), // JSON-LD schema
+  internalLinks: jsonb("internal_links").$type<Array<{ targetSlug: string; anchorText: string }>>().default([]).notNull(),
+  
+  // Status & Publishing
+  status: varchar("status", { length: 20 }).default("draft").notNull(), // draft|review|scheduled|published|archived
+  scheduledAt: timestamp("scheduled_at"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("posts_biz").on(t.bizId, t.status),
+  uniqueIndex("posts_biz_slug").on(t.bizId, t.slug),
+]);
+
+// ---------- 4. Site Sync & Auto-Indexing Logs ----------
+export const siteSyncLogs = pgTable("site_sync_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bizId: uuid("biz_id").references(() => bizs.id, { onDelete: "cascade" }).notNull(),
+  postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }).notNull(),
+  siteId: uuid("site_id").references(() => sites.id, { onDelete: "cascade" }).notNull(),
+  remotePostId: varchar("remote_post_id", { length: 80 }),
+  remoteUrl: text("remote_url"),
+  syncStatus: varchar("sync_status", { length: 20 }).default("success").notNull(), // success|failed
+  indexingGoogleStatus: varchar("indexing_google_status", { length: 20 }).default("pending").notNull(), // pending|submitted|indexed|error
+  indexingIndexNowStatus: varchar("indexing_indexnow_status", { length: 20 }).default("pending").notNull(), // pending|submitted|error
+  errorLog: text("error_log"),
+  syncedAt: timestamp("synced_at").defaultNow().notNull(),
+}, (t) => [index("site_sync_logs_post").on(t.postId)]);
+
+// ---------- 5. Creative Matrix (Angles, Hooks & Copy Frameworks) ----------
+export const creativeMatrix = pgTable("creative_matrix", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bizId: uuid("biz_id").references(() => bizs.id, { onDelete: "cascade" }).notNull(),
+  sourcePostId: uuid("source_post_id").references(() => posts.id, { onDelete: "set null" }),
+  angle: varchar("angle", { length: 80 }).notNull(), // pain_point|transformation|case_study|fomo|contrarian
+  framework: varchar("framework", { length: 40 }).notNull(), // PAS|AIDA|BAB|FAB
+  headline: varchar("headline", { length: 255 }).notNull(),
+  hooks: jsonb("hooks").$type<string[]>().default([]).notNull(), // 3-5 visual/text hooks
+  bodyCopy: text("body_copy").notNull(),
+  callToAction: varchar("call_to_action", { length: 120 }).notNull(),
+  targetAudience: text("target_audience"),
+  mediaAssetUrls: jsonb("media_asset_urls").$type<string[]>().default([]).notNull(),
+  status: varchar("status", { length: 20 }).default("draft").notNull(), // draft|ready|testing|archived
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [index("creative_matrix_biz").on(t.bizId)]);
+
+// ---------- 6. Server-Side Conversions & Attribution (CAPI Hub) ----------
+export const conversionEvents = pgTable("conversion_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bizId: uuid("biz_id").references(() => bizs.id, { onDelete: "cascade" }).notNull(),
+  orderId: varchar("order_id", { length: 120 }).notNull(),
+  orderNumber: varchar("order_number", { length: 80 }),
+  revenue: bigint("revenue", { mode: "number" }).notNull(), // Số tiền thực (VNĐ)
+  currency: varchar("currency", { length: 10 }).default("VND").notNull(),
+  
+  // Hashed User Data (SHA-256) for Meta CAPI & Google Offline
+  customerEmailSha256: varchar("customer_email_sha256", { length: 64 }),
+  customerPhoneSha256: varchar("customer_phone_sha256", { length: 64 }),
+  customerName: varchar("customer_name", { length: 160 }),
+  
+  // Source Attribution
+  sourcePlatform: varchar("source_platform", { length: 40 }).default("direct"), // meta|google|tiktok|direct|organic
+  utmSource: varchar("utm_source", { length: 120 }),
+  utmMedium: varchar("utm_medium", { length: 120 }),
+  utmCampaign: varchar("utm_campaign", { length: 120 }),
+  fbp: varchar("fbp", { length: 120 }),
+  fbc: varchar("fbc", { length: 120 }),
+  gclid: text("gclid"),
+  
+  // CAPI Dispatch Status
+  metaCapiStatus: varchar("meta_capi_status", { length: 20 }).default("pending").notNull(), // pending|sent|failed|skipped
+  googleOfflineStatus: varchar("google_offline_status", { length: 20 }).default("pending").notNull(), // pending|sent|failed|skipped
+  rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>().default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("conv_biz_order").on(t.bizId, t.orderId),
+  index("conv_biz_created").on(t.bizId, t.createdAt),
+]);
