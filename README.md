@@ -64,6 +64,89 @@ npm run dev                 # http://localhost:3000
 
 ---
 
+## Chạy production trên máy local
+
+Bản production dùng Next.js **standalone** (không dùng `next start`):
+
+```bash
+npm run build          # tạo .next/standalone
+npm run serve:prod     # stage static/public → migrate PGlite → chạy server
+```
+
+`serve:prod` đọc `.env` + `.env.local`, áp migration trước khi mở server (PGlite chỉ cho 1 process), rồi chạy `.next/standalone/server.js` tại `http://localhost:3000`.
+
+Các biến bắt buộc trong `.env`:
+
+| Biến | Ý nghĩa |
+|---|---|
+| `NEXTAUTH_SECRET` | Khoá mã hoá credential (≥ 32 ký tự). Thiếu là `/api/health` trả 500. |
+| `APP_URL` / `NEXTAUTH_URL` | `http://localhost:3000` — dùng để tạo redirect OAuth và metadata MCP. |
+| `ADSYNC_MOCK=0` | Gọi API thật của Meta/Google/TikTok thay vì dữ liệu giả. |
+| `ADSYNC_INPROC_WORKER=1` | Scheduler chạy trong process server. |
+| `MCP_RATE_LIMIT_PER_MIN` | (tuỳ chọn) giới hạn request/phút cho mỗi MCP key, mặc định 240. |
+
+> ⚠️ `NEXTAUTH_SECRET` là khoá mã hoá token của mọi kết nối. **Đổi/rotate secret sẽ làm toàn bộ connection cũ không giải mã được** (lỗi `Unsupported state or unable to authenticate data`) và phải kết nối lại. Hãy backup secret này cùng `.pgdata`.
+
+`serve.mjs` tự bảo vệ: nếu cổng 3000 đang bận thì dừng ngay với thông báo rõ (tránh 2 process cùng mở PGlite), và nếu tiến trình server con chết bất thường thì tự khởi động lại (tối đa 5 lần, backoff 3→30s).
+
+### Tự chạy khi đăng nhập Windows
+
+Cách không cần quyền admin (đang dùng): shortcut trong Startup folder
+
+```
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\AdsSync.lnk
+  → D:\ADS MCP APP\scripts\start-adsync.cmd
+  → node scripts\serve.mjs
+```
+
+Nếu muốn dùng Task Scheduler (cần quyền admin để tạo trigger) thì trỏ action về cùng script:
+
+```powershell
+$a = New-ScheduledTaskAction -Execute "C:\Program Files\nodejs\node.exe" `
+  -Argument "`"D:\ADS MCP APP\scripts\serve.mjs`"" -WorkingDirectory "D:\ADS MCP APP"
+$t = New-ScheduledTaskTrigger -AtLogOn
+Register-ScheduledTask -TaskName "AdsSyncServer" -Action $a -Trigger $t -Force
+```
+
+Đừng bật cả hai cùng lúc — chỉ một tiến trình được giữ cổng 3000 và mở `.pgdata`.
+
+Sau khi build lại code, dừng tiến trình cũ rồi chạy lại (`serve.mjs` tự stage lại file tĩnh mỗi lần khởi động).
+
+### Kiểm tra sau khi chạy
+
+```bash
+curl http://localhost:3000/api/health
+node scripts/verify_mcp.mjs                 # discovery + 401 + health
+MCP_KEY=mk_... node scripts/verify_mcp.mjs  # + initialize / tools/list / tools/call
+```
+
+---
+
+## Cấp quyền cho AI khác dùng AdsSync (MCP)
+
+Vào **Biz → MCP Keys**:
+
+1. **Tạo key** — chọn nền tảng (Meta, Google Ads, TikTok, Search Console, GA4, Clarity), mức quyền (`Chỉ đọc` / `Toàn quyền` / `Tắt`), bộ chỉ số và skill.
+2. **ChatGPT** dùng OAuth: dán `http://localhost:3000/mcp` vào connector; AdsSync tự công bố metadata tại `/.well-known/oauth-authorization-server` và màn hình duyệt key.
+3. **Claude Desktop / Cursor** dùng API key: copy JSON cấu hình (hoặc URL `http://localhost:3000/mcp?key=mk_...`).
+4. **Kiểm tra key** trong menu ⋯ để xác nhận key còn sống và xem agent sẽ thấy bao nhiêu tool.
+
+Mọi lệnh ghi (tắt ads, đổi ngân sách, đăng bài) vẫn đi qua **Approval Gate** — AI chỉ tạo yêu cầu, bạn bấm duyệt trong tab *Chờ duyệt*.
+
+### Kết nối dữ liệu
+
+| Nền tảng | Cách kết nối | Quyền tối thiểu |
+|---|---|---|
+| Meta Ads / Page | OAuth Facebook | `ads_read`, `pages_read_engagement`, `read_insights` |
+| Google Ads | OAuth Google + `GOOGLE_ADS_DEVELOPER_TOKEN` | `adwords` |
+| Google Search Console | OAuth Google (`provider=search_console`) | `webmasters.readonly` |
+| Google Analytics 4 | OAuth Google (`provider=ga4`) | `analytics.readonly` |
+| Microsoft Clarity | API token (Settings → Data Export) | token project |
+
+Clarity chỉ trả 1–3 ngày gần nhất và tối đa **10 request/ngày**; AdsSync cache kết quả 3 giờ trong connection để tiết kiệm quota.
+
+---
+
 ## Chạy & Cập nhật Desktop
 
 ```bash

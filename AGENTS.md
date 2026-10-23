@@ -46,7 +46,7 @@ Xây dựng nền tảng quản trị và tự động hóa quảng cáo đa kê
 
 ### 4. Quy tắc phát triển (Dành cho Agents khi sửa code)
 * **Kiểm tra TypeScript**: Luôn chạy `npx tsc --noEmit` hoặc `npm run build` sau khi chỉnh sửa code.
-* **Server Daemon**: Server local chạy nền qua Windows Task Scheduler task `AdsSyncServer` (PID quản lý tự động, lắng nghe tại `http://localhost:3000`). Nếu cần khởi động lại, dùng lệnh PowerShell:
+* **Server Daemon**: Server local chạy nền qua Windows Task Scheduler task `AdsSyncServer` (PID quản lý tự động, lắng nghe tại `http://localhost:3000`). Task chạy `node scripts/serve.mjs` — script này stage `.next/standalone` + `public` + `drizzle`, áp migration PGlite rồi mới khởi động server (KHÔNG dùng `next start` vì `next.config.ts` bật `output: "standalone"`). Sau khi sửa code phải `npm run build` trước. Nếu cần khởi động lại, dùng lệnh PowerShell:
   ```powershell
   Stop-ScheduledTask -TaskName "AdsSyncServer"; Start-Sleep -Seconds 1; Start-ScheduledTask -TaskName "AdsSyncServer"
   ```

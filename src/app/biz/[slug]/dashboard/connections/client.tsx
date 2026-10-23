@@ -990,10 +990,12 @@ function ConnRowView({
   );
 }
 
-const OAUTH_CONNECT: Record<string, { path: string; label: string }> = {
+const OAUTH_CONNECT: Record<string, { path: string; label: string; provider?: string }> = {
   meta_ads: { path: "meta", label: "Facebook" },
   tiktok_ads: { path: "tiktok", label: "TikTok Ads" },
-  google_ads: { path: "google", label: "Google Ads" },
+  google_ads: { path: "google", label: "Google Ads", provider: "google_ads" },
+  google_search_console: { path: "google", label: "Google", provider: "search_console" },
+  ga4: { path: "google", label: "Google", provider: "ga4" },
 };
 
 function AddConnectionDialog({
@@ -1020,7 +1022,13 @@ function AddConnectionDialog({
 
   const oauth = picked ? OAUTH_CONNECT[picked.id] : undefined;
   const oauthReady =
-    picked?.id === "meta_ads" ? metaOAuthReady : picked?.id === "tiktok_ads" ? tiktokOAuthReady : picked?.id === "google_ads" ? googleOAuthReady : false;
+    picked?.id === "meta_ads"
+      ? metaOAuthReady
+      : picked?.id === "tiktok_ads"
+        ? tiktokOAuthReady
+        : picked?.id === "google_ads" || picked?.id === "google_search_console" || picked?.id === "ga4"
+          ? googleOAuthReady
+          : false;
   const showManualForm = !oauthReady || manualOpen;
 
   const groups: ProviderGroup[] = ["ads", "sales", "ai", "notify", "other"];
@@ -1114,7 +1122,13 @@ function AddConnectionDialog({
                 </p>
                 <button
                   type="button"
-                  onClick={() => openExternal(`${origin}/api/connect/${oauth.path}/start?slug=${slug}`)}
+                  onClick={() =>
+                    openExternal(
+                      `${origin}/api/connect/${oauth.path}/start?slug=${slug}${
+                        oauth.provider ? `&provider=${oauth.provider}` : ""
+                      }`,
+                    )
+                  }
                   className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-[13px] font-semibold"
                   style={{ borderColor: "var(--brand)", background: "var(--brand-soft)", color: "var(--brand)" }}
                 >

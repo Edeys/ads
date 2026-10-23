@@ -1,9 +1,12 @@
-// Google Ads OAuth — bước 2: exchange code -> tokens -> lưu connection.
+// Google OAuth — bước 2: exchange code -> tokens -> lưu connection.
 //
-// Điểm quan trọng: developer token KHÔNG phải OAuth scope — nó là header bắt
-// buộc của Google Ads API và phải được cấu hình riêng. Không có nó thì
-// listAccessibleCustomers không trả tài khoản nào, và người dùng thấy
-// "không có tài khoản quảng cáo" dù OAuth đã thành công.
+// Một callback dùng cho 3 luồng, phân biệt bằng `provider` trong state:
+//   • google_ads      → lưu connection google_ads (kèm danh sách TKQC)
+//   • search_console  → lưu connection google_search_console (kèm site đã xác minh)
+//   • ga4             → lưu connection ga4 (kèm property)
+//
+// Developer token KHÔNG phải OAuth scope — nó là header bắt buộc của Google Ads
+// API và được cấu hình riêng trong env.
 import { createHmac, timingSafeEqual } from "crypto";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
@@ -19,7 +22,9 @@ export const runtime = "nodejs";
 
 const ADS_API = "https://googleads.googleapis.com/v25";
 
-function verifyState(state: string): { slug: string; conn?: string; scope?: string[] } | null {
+type GoogleFlow = "google_ads" | "search_console" | "ga4";
+
+function verifyState(state: string): { slug: string; conn?: string; provider?: GoogleFlow; scope?: string[] } | null {
   const [data, sig] = state.split(".");
   if (!data || !sig) return null;
   const expect = createHmac("sha256", process.env.NEXTAUTH_SECRET || "dev-secret").update(data).digest("base64url");
@@ -68,19 +73,22 @@ export async function GET(req: Request) {
   const [biz] = await db.select().from(schema.bizs).where(eq(schema.bizs.slug, st.slug)).limit(1);
   if (!biz) return Response.json({ error: "biz_not_found" }, { status: 404 });
 
+  const flow: GoogleFlow = st.provider ?? "google_ads";
+
   let accessToken = "";
   let refreshToken = "";
-  let customers: any[] = [];
   let grantedScopeRaw = "";
   let accountEmail = "";
 
   if (isMock) {
-    accessToken = `mock_google_ads_acc_${Date.now()}`;
-    refreshToken = `mock_google_ads_ref_${Date.now()}`;
-    customers = [
-      { id: "123-456-7890", descriptiveName: "Google Ads VN Store", currencyCode: "VND" }
-    ];
-    grantedScopeRaw = "https://www.googleapis.com/auth/adwords openid https://www.googleapis.com/auth/userinfo.email";
+    accessToken = `mock_google_acc_${Date.now()}`;
+    refreshToken = `mock_google_ref_${Date.now()}`;
+    grantedScopeRaw =
+      flow === "search_console"
+        ? "https://www.googleapis.com/auth/webmasters.readonly openid https://www.googleapis.com/auth/userinfo.email"
+        : flow === "ga4"
+          ? "https://www.googleapis.com/auth/analytics.readonly openid https://www.googleapis.com/auth/userinfo.email"
+          : "https://www.googleapis.com/auth/adwords openid https://www.googleapis.com/auth/userinfo.email";
   } else {
     const clientId = process.env.GOOGLE_ADS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
@@ -120,7 +128,121 @@ export async function GET(req: Request) {
       headers: { Authorization: `Bearer ${accessToken}` },
     }).then((r) => (r.ok ? r.json() : {})).catch(() => ({} as Record<string, unknown>));
     accountEmail = String((info as Record<string, unknown>).email ?? "");
+  }
 
+  // ---------------------------------------------------- Google Search Console
+  if (flow === "search_console") {
+    const granted = grantedKeys("search_console", grantedScopeRaw);
+    const missing = missingScopes("search_console", granted);
+    let sites: Array<{ siteUrl: string; permissionLevel: string }> = [];
+
+    if (isMock) {
+      sites = [{ siteUrl: "https://example.com/", permissionLevel: "siteOwner" }];
+    } else {
+      const res: any = await fetch("https://searchconsole.googleapis.com/webmasters/v3/sites", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+      sites = (res.siteEntry ?? []).map((s: any) => ({
+        siteUrl: s.siteUrl,
+        permissionLevel: s.permissionLevel,
+      }));
+    }
+
+    const { row, updated } = await saveOAuthConnection({
+      bizId: biz.id,
+      existingId: st.conn,
+      provider: "google_search_console",
+      name: "Google Search Console",
+      secret: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        client_id: process.env.GOOGLE_ADS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || "",
+        client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || "",
+      },
+      meta: {
+        sites: sites.map((s) => s.siteUrl),
+        siteDetails: sites,
+        grantedScopes: granted,
+        missingScopes: missing.map((m) => m.key),
+        accountEmail,
+      },
+    });
+
+    await logActivity({
+      bizId: biz.id,
+      action: updated ? "connection.update" : "connection.create",
+      objectType: "connection",
+      objectId: row.id,
+      detail: { provider: "google_search_console", via: isMock ? "oauth_sandbox" : "oauth", sites: sites.length },
+    });
+
+    return Response.redirect(
+      oauthResultUrl({ appUrl, provider: "google", status: "ok", slug: st.slug, successLabel: "google_search_console" }),
+    );
+  }
+
+  // --------------------------------------------------------------------- GA4
+  if (flow === "ga4") {
+    const granted = grantedKeys("ga4", grantedScopeRaw);
+    const missing = missingScopes("ga4", granted);
+    let properties: Array<{ account: string; propertyId: string; property: string }> = [];
+
+    if (isMock) {
+      properties = [{ account: "Demo Account", propertyId: "123456789", property: "Demo Property" }];
+    } else {
+      const res: any = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+      for (const acc of res.accountSummaries ?? []) {
+        for (const p of acc.propertySummaries ?? []) {
+          properties.push({
+            account: acc.displayName ?? "",
+            propertyId: String(p.property ?? "").replace("properties/", ""),
+            property: p.displayName ?? "",
+          });
+        }
+      }
+    }
+
+    const { row, updated } = await saveOAuthConnection({
+      bizId: biz.id,
+      existingId: st.conn,
+      provider: "ga4",
+      name: "Google Analytics 4",
+      secret: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        client_id: process.env.GOOGLE_ADS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || "",
+        client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || "",
+      },
+      meta: {
+        properties,
+        defaultPropertyId: properties[0]?.propertyId ?? null,
+        grantedScopes: granted,
+        missingScopes: missing.map((m) => m.key),
+        accountEmail,
+      },
+    });
+
+    await logActivity({
+      bizId: biz.id,
+      action: updated ? "connection.update" : "connection.create",
+      objectType: "connection",
+      objectId: row.id,
+      detail: { provider: "ga4", via: isMock ? "oauth_sandbox" : "oauth", properties: properties.length },
+    });
+
+    return Response.redirect(
+      oauthResultUrl({ appUrl, provider: "google", status: "ok", slug: st.slug, successLabel: "ga4" }),
+    );
+  }
+
+  // ------------------------------------------------------------- Google Ads
+  let customers: any[] = [];
+
+  if (isMock) {
+    customers = [{ id: "123-456-7890", descriptiveName: "Google Ads VN Store", currencyCode: "VND" }];
+  } else {
     // Danh sách tài khoản quảng cáo — cần developer token.
     const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     if (devToken) {

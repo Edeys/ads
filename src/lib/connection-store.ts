@@ -5,7 +5,12 @@ import { db, schema } from "@/db";
 import { and, eq } from "drizzle-orm";
 import { encryptSecret } from "./crypto";
 
-export type OAuthProvider = "meta_ads" | "google_ads" | "tiktok_ads";
+export type OAuthProvider =
+  | "meta_ads"
+  | "google_ads"
+  | "tiktok_ads"
+  | "google_search_console"
+  | "ga4";
 
 export async function saveOAuthConnection(opts: {
   bizId: string;

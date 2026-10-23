@@ -15,6 +15,7 @@ captures/
 rea_done_vn/
 .pgdata.bak
 .pgdata.bak2
+.pgdata.last-migration
 
 # Tài liệu reverse-engineer / spec của bên thứ ba — không đưa lên repo public
 DONE_VN_SPEC.md

@@ -148,7 +148,35 @@ export const PROVIDERS: ProviderDef[] = [
   // ---- Sắp ra mắt ----
   { id: "bigquery", label: "BigQuery", group: "other", auth: "apikey", comingSoon: true, fields: [] },
   { id: "postgresql", label: "PostgreSQL", group: "other", auth: "apikey", comingSoon: true, fields: [] },
-  { id: "ga4", label: "GA4", group: "other", auth: "apikey", comingSoon: true, fields: [] },
+  // ---- Phân tích & SEO ----
+  {
+    id: "ga4", label: "Google Analytics 4", group: "other", auth: "oauth",
+    hint: "Kết nối bằng Google OAuth (quyền analytics.readonly) để đọc property, phiên, người dùng và chuyển đổi.",
+    fields: [
+      { key: "refresh_token", label: "Refresh Token", secret: true, required: true, target: "secret" },
+      { key: "client_id", label: "OAuth Client ID (tuỳ chọn)", target: "secret" },
+      { key: "client_secret", label: "OAuth Client Secret (tuỳ chọn)", secret: true, target: "secret" },
+      { key: "property_id", label: "Property ID mặc định (tuỳ chọn)", target: "meta", placeholder: "123456789" },
+    ],
+  },
+  {
+    id: "google_search_console", label: "Google Search Console", group: "other", auth: "oauth",
+    hint: "Kết nối bằng Google OAuth (quyền webmasters.readonly) để đọc impressions, clicks, CTR và vị trí.",
+    fields: [
+      { key: "refresh_token", label: "Refresh Token", secret: true, required: true, target: "secret" },
+      { key: "client_id", label: "OAuth Client ID (tuỳ chọn)", target: "secret" },
+      { key: "client_secret", label: "OAuth Client Secret (tuỳ chọn)", secret: true, target: "secret" },
+      { key: "site_url", label: "Site URL mặc định (tuỳ chọn)", target: "meta", placeholder: "https://example.com/" },
+    ],
+  },
+  {
+    id: "clarity", label: "Microsoft Clarity", group: "other", auth: "apikey",
+    hint: "Token tạo tại Clarity → Settings → Data Export. API chỉ trả 1–3 ngày gần nhất, tối đa 10 request/ngày.",
+    fields: [
+      { key: "api_token", label: "API Token", secret: true, required: true, target: "secret" },
+      { key: "project_name", label: "Tên project (để nhận biết)", target: "meta" },
+    ],
+  },
   { id: "haravan", label: "Haravan", group: "sales", auth: "apikey", comingSoon: true, fields: [] },
   { id: "kiotviet", label: "KiotViet", group: "sales", auth: "apikey", comingSoon: true, fields: [] },
   { id: "bitrix24", label: "Bitrix24", group: "sales", auth: "apikey", comingSoon: true, fields: [] },

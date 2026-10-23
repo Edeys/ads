@@ -14,6 +14,8 @@ export type ScopeGroup =
   | "publish" // đăng bài, quản lý bài viết
   | "engage" // trả lời/ẩn comment
   | "messaging" // nhắn tin riêng
+  | "analytics" // GA4, hành vi website
+  | "seo" // Search Console
   | "insights"; // đọc chỉ số nâng cao (IG, lead)
 
 export type ScopeDef = {
@@ -36,6 +38,8 @@ export const SCOPE_GROUP_LABELS: Record<ScopeGroup, string> = {
   publish: "Đăng bài",
   engage: "Tương tác",
   messaging: "Nhắn tin",
+  analytics: "Phân tích website",
+  seo: "SEO & tìm kiếm",
   insights: "Chỉ số nâng cao",
 };
 
@@ -222,10 +226,66 @@ export const TIKTOK_SCOPES: ScopeDef[] = [
   },
 ];
 
+// --------------------------------------------------- Google Search Console --
+// Chỉ cần quyền đọc: tool của AdsSync không sửa dữ liệu Search Console.
+export const SEARCH_CONSOLE_SCOPES: ScopeDef[] = [
+  {
+    scope: "https://www.googleapis.com/auth/webmasters.readonly",
+    key: "webmasters",
+    label: "Search Console (đọc)",
+    description: "Đọc site đã xác minh, impressions, clicks, CTR và vị trí trung bình.",
+    group: "seo",
+    needsReview: false,
+  },
+  {
+    scope: "openid",
+    key: "openid",
+    label: "OpenID",
+    description: "Xác minh danh tính tài khoản Google đang cấp quyền.",
+    group: "business",
+    needsReview: false,
+  },
+  {
+    scope: "https://www.googleapis.com/auth/userinfo.email",
+    key: "userinfo_email",
+    label: "Email người dùng",
+    description: "Hiển thị tài khoản Google nào đang kết nối.",
+    group: "business",
+    needsReview: false,
+  },
+];
+
+// --------------------------------------------------------------------- GA4 --
+export const GA4_SCOPES: ScopeDef[] = [
+  {
+    scope: "https://www.googleapis.com/auth/analytics.readonly",
+    key: "analytics",
+    label: "Google Analytics 4 (đọc)",
+    description: "Đọc property, số phiên, người dùng, nguồn truy cập và sự kiện chuyển đổi.",
+    group: "analytics",
+    needsReview: false,
+  },
+  {
+    scope: "openid",
+    key: "openid",
+    label: "OpenID",
+    description: "Xác minh danh tính tài khoản Google đang cấp quyền.",
+    group: "business",
+    needsReview: false,
+  },
+  {
+    scope: "https://www.googleapis.com/auth/userinfo.email",
+    key: "userinfo_email",
+    label: "Email người dùng",
+    description: "Hiển thị tài khoản Google nào đang kết nối.",
+    group: "business",
+    needsReview: false,
+  },
+];
+
 // ------------------------------------------------------------- Google Sheets --
 
-export const SHEETS_SCOPES: ScopeDef[] = [
-  {
+export const SHEETS_SCOPES: ScopeDef[] = [  {
     scope: "https://www.googleapis.com/auth/spreadsheets",
     key: "sheets_rw",
     label: "Google Sheets (đọc/ghi)",
@@ -243,13 +303,15 @@ export const SHEETS_SCOPES: ScopeDef[] = [
   },
 ];
 
-export type ScopeProvider = "meta" | "google" | "tiktok" | "sheets";
+export type ScopeProvider = "meta" | "google" | "tiktok" | "sheets" | "search_console" | "ga4";
 
 export const PROVIDER_SCOPES: Record<ScopeProvider, ScopeDef[]> = {
   meta: META_SCOPES,
   google: GOOGLE_ADS_SCOPES,
   tiktok: TIKTOK_SCOPES,
   sheets: SHEETS_SCOPES,
+  search_console: SEARCH_CONSOLE_SCOPES,
+  ga4: GA4_SCOPES,
 };
 
 /** Chuỗi scope gửi cho provider (dùng cho OAuth dialog). */
@@ -258,7 +320,7 @@ export function scopeString(provider: ScopeProvider, keys?: string[]): string {
   const picked = keys?.length ? all.filter((s) => keys.includes(s.key)) : all;
   // Google (và Google Sheets) yêu cầu scope phân tách bằng DẤU CÁCH; dùng dấu
   // phẩy sẽ bị invalid_scope. Meta/TikTok dùng dấu phẩy.
-  const separator = provider === "google" || provider === "sheets" ? " " : ",";
+  const separator = provider === "google" || provider === "sheets" || provider === "search_console" || provider === "ga4" ? " " : ",";
   return picked.map((s) => s.scope).join(separator);
 }
 
@@ -280,6 +342,10 @@ export function defaultScopeKeys(provider: ScopeProvider): string[] {
       return ["ads_read", "ads_management", "agent_advertiser"];
     case "sheets":
       return ["sheets_rw"];
+    case "search_console":
+      return ["webmasters", "openid", "userinfo_email"];
+    case "ga4":
+      return ["analytics", "openid", "userinfo_email"];
   }
 }
 

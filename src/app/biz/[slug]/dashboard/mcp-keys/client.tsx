@@ -36,6 +36,9 @@ const scopeProviders: Provider[] = [
   { key: "meta_ads", label: "Meta Ads", initial: "M" },
   { key: "google_ads", label: "Google Ads", initial: "G" },
   { key: "tiktok_ads", label: "TikTok Ads", initial: "T" },
+  { key: "search_console", label: "Search Console", initial: "S" },
+  { key: "ga4", label: "Google Analytics 4", initial: "A" },
+  { key: "clarity", label: "Microsoft Clarity", initial: "C" },
 ];
 type Skill = { id: string; name: string; enabled: boolean; platforms: string[] };
 type CallLog = { id: string; tool: string; ok: boolean; latencyMs: number; createdAt: string; keyId: string; keyName: string };
@@ -78,6 +81,48 @@ export function McpKeysClient({ slug, appUrl }: { slug: string; appUrl: string }
   const [copied, setCopied] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logs, setLogs] = useState<CallLog[]>([]);
+  const [test, setTest] = useState<{
+    id: string;
+    loading: boolean;
+    ok?: boolean;
+    toolCount?: number;
+    tools?: string[];
+    error?: string;
+    text?: string;
+  } | null>(null);
+
+  // Gọi endpoint test nội bộ: xác nhận key còn sống + liệt kê tool agent sẽ thấy.
+  // Dùng chung một state cho cả dòng trạng thái trong bảng và modal chi tiết.
+  async function testKey(id: string) {
+    setMenuId(null);
+    setTest({ id, loading: true });
+    try {
+      const res = await fetch(`/api/biz/${slug}/mcp-keys/${id}/test`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const j = await res.json().catch(() => ({}));
+      const ok = res.ok && j.ok !== false;
+      setTest({
+        id,
+        loading: false,
+        ok,
+        toolCount: j.toolCount,
+        tools: Array.isArray(j.tools) ? j.tools : [],
+        error: ok ? undefined : j.error,
+        text: ok
+          ? `Key hợp lệ · ${j.toolCount ?? 0} tool khả dụng`
+          : j.error === "key_inactive"
+            ? "Key đang tắt hoặc đã thu hồi"
+            : j.error === "key_expired"
+              ? "Key đã hết hạn"
+              : (j.error ?? `HTTP ${res.status}`),
+      });
+    } catch (e: any) {
+      setTest({ id, loading: false, ok: false, error: e?.message, text: e?.message ?? "Không gọi được endpoint test" });
+    }
+  }
 
   async function load() {
     const [k, a, p, s] = await Promise.all([
@@ -123,6 +168,9 @@ export function McpKeysClient({ slug, appUrl }: { slug: string; appUrl: string }
         metaScope: pickedScopes.meta_ads ?? "read",
         googleScope: pickedScopes.google_ads ?? "read",
         tiktokScope: pickedScopes.tiktok_ads ?? "read",
+        searchConsoleScope: pickedScopes.search_console ?? "read",
+        ga4Scope: pickedScopes.ga4 ?? "read",
+        clarityScope: pickedScopes.clarity ?? "read",
       }),
     });
     const j = await res.json();
@@ -371,6 +419,14 @@ export function McpKeysClient({ slug, appUrl }: { slug: string; appUrl: string }
                             <div className="truncate font-mono text-[12px]" style={{ color: "var(--ink-400)" }}>
                               {k.keyPrefix}… · {k.callCount} calls
                             </div>
+                            {test?.id === k.id && (
+                              <div
+                                className="mt-1 truncate text-[11.5px] font-medium"
+                                style={{ color: test.loading ? "var(--ink-400)" : test.ok ? "var(--ok-ink)" : "var(--danger-ink)" }}
+                              >
+                                {test.loading ? "Đang kiểm tra…" : test.text}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -451,6 +507,22 @@ export function McpKeysClient({ slug, appUrl }: { slug: string; appUrl: string }
                                 className="absolute right-0 top-9 z-20 w-[150px] overflow-hidden rounded-xl border bg-[var(--card)] py-1 text-left"
                                 style={{ borderColor: "var(--line)", boxShadow: "0 12px 28px -12px rgba(13,27,42,.28)" }}
                               >
+                                <button
+                                  type="button"
+                                  onClick={() => testKey(k.id)}
+                                  className="block w-full px-3 py-2 text-left text-[13px] hover:bg-[var(--surface-3)]"
+                                  style={{ color: "var(--ink-700)" }}
+                                >
+                                  Kiểm tra key
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => testKey(k.id)}
+                                  className="block w-full px-3 py-2 text-left text-[13px] hover:bg-[var(--surface-3)]"
+                                  style={{ color: "var(--ink-700)" }}
+                                >
+                                  Kiểm tra key
+                                </button>
                                 {k.status === "active" ? (
                                   <button
                                     type="button"
@@ -960,6 +1032,58 @@ export function McpKeysClient({ slug, appUrl }: { slug: string; appUrl: string }
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {test && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setTest(null)}
+        >
+          <div className="ui-card w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink-900)" }}>
+                Kiểm tra key
+              </h3>
+              <button
+                type="button"
+                onClick={() => setTest(null)}
+                className="rounded-lg px-2 py-1 text-[12px]"
+                style={{ color: "var(--ink-500)" }}
+              >
+                Đóng
+              </button>
+            </div>
+
+            {test.loading ? (
+              <p className="mt-3 text-[13px]" style={{ color: "var(--ink-500)" }}>
+                Đang gọi MCP server…
+              </p>
+            ) : test.ok ? (
+              <>
+                <p className="mt-3 text-[13px]" style={{ color: "var(--ok-ink)" }}>
+                  Key hợp lệ · agent sẽ thấy {test.toolCount ?? 0} tool.
+                </p>
+                <div className="mt-3 flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
+                  {(test.tools ?? []).map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-md px-2 py-1 font-mono text-[11.5px]"
+                      style={{ background: "var(--surface-3)", color: "var(--ink-600)" }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="mt-3 text-[13px]" style={{ color: "var(--danger-ink)" }}>
+                {test.error === "key_inactive" || test.error === "key_expired"
+                  ? "Key đang tắt hoặc đã hết hạn — bật lại trước khi dùng."
+                  : `Không dùng được key: ${test.error ?? "unknown_error"}`}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

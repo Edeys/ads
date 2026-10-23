@@ -24,6 +24,8 @@ const CONNECTION_PROVIDER: Record<string, ScopeProvider> = {
   google_ads: "google",
   tiktok_ads: "tiktok",
   google_sheets: "sheets",
+  google_search_console: "search_console",
+  ga4: "ga4",
 };
 
 async function guard(slug: string) {
@@ -94,8 +96,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const startPath =
-    conn.provider === "meta_ads" ? "meta" : conn.provider === "google_ads" ? "google" : "tiktok";
-  const url = `${appUrl}/api/connect/${startPath}/start?slug=${encodeURIComponent(slug)}&conn=${encodeURIComponent(conn.id)}&scope=${encodeURIComponent(target.join(","))}`;
+    conn.provider === "meta_ads" ? "meta" : conn.provider === "tiktok_ads" ? "tiktok" : "google";
+  const providerParam =
+    conn.provider === "google_search_console"
+      ? "&provider=search_console"
+      : conn.provider === "ga4"
+        ? "&provider=ga4"
+        : "";
+  const url = `${appUrl}/api/connect/${startPath}/start?slug=${encodeURIComponent(slug)}&conn=${encodeURIComponent(conn.id)}${providerParam}&scope=${encodeURIComponent(target.join(","))}`;
 
   await logActivity({
     bizId: m.biz.id,

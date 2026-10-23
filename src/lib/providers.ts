@@ -170,6 +170,50 @@ const CHECKS: Record<string, CheckFn> = {
     return { health: "ok", meta };
   },
 
+  async google_search_console(s, meta) {
+    if (s.access_token?.startsWith("mock_")) return { health: "ok", meta };
+    const token = await googleRefreshToken(s);
+    if (!token) return { health: "dead" };
+    const res = await fetchT("https://searchconsole.googleapis.com/webmasters/v3/sites", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { health: "dead" };
+    const j = await res.json().catch(() => ({}));
+    const sites = (j.siteEntry ?? []).map((x: any) => x.siteUrl);
+    return { health: "ok", meta: { ...meta, sites } };
+  },
+
+  async ga4(s, meta) {
+    if (s.access_token?.startsWith("mock_")) return { health: "ok", meta };
+    const token = await googleRefreshToken(s);
+    if (!token) return { health: "dead" };
+    const res = await fetchT("https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { health: "dead" };
+    const j = await res.json().catch(() => ({}));
+    const properties: Array<{ propertyId: string; property: string }> = [];
+    for (const acc of j.accountSummaries ?? []) {
+      for (const p of acc.propertySummaries ?? []) {
+        properties.push({
+          propertyId: String(p.property ?? "").replace("properties/", ""),
+          property: p.displayName ?? "",
+        });
+      }
+    }
+    return { health: "ok", meta: { ...meta, properties } };
+  },
+
+  async clarity(s, meta) {
+    if (s.api_token?.startsWith("mock_")) return { health: "ok", meta };
+    const res = await fetchT("https://www.clarity.ms/export-data/api/v1/project-live-insights?numOfDays=1", {
+      headers: { Authorization: `Bearer ${s.api_token}`, "content-type": "application/json" },
+    });
+    // 429 = token đúng nhưng hết quota ngày; vẫn coi là kết nối sống.
+    if (res.status === 429) return { health: "ok", meta: { ...meta, quota: "exhausted" } };
+    return res.ok ? { health: "ok", meta } : { health: "dead" };
+  },
+
   async gemini(s) {
     return okIf(await fetchT(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${s.api_key}`));
   },
@@ -209,8 +253,28 @@ const CHECKS: Record<string, CheckFn> = {
   async pancake_chat(s) { return pancakeCheck(s); },
 };
 
-async function pancakeCheck(s: Record<string, string>): Promise<CheckResult> {
-  const res = await fetchT(`https://pos.pancake.vn/api/v1/shops?access_token=${s.access_token}&page_size=1`);
+// Đổi refresh_token -> access_token cho các connector Google đọc dữ liệu.
+async function googleRefreshToken(s: Record<string, string>): Promise<string | null> {
+  if (s.access_token && !s.refresh_token) return s.access_token;
+  const clientId = s.client_id || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_ADS_CLIENT_ID || "";
+  const clientSecret = s.client_secret || process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_ADS_CLIENT_SECRET || "";
+  if (!s.refresh_token || !clientId || !clientSecret) return s.access_token ?? null;
+  const res = await fetchT("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: s.refresh_token,
+      grant_type: "refresh_token",
+    }),
+  });
+  if (!res.ok) return null;
+  const j = await res.json().catch(() => ({}));
+  return (j.access_token as string) ?? null;
+}
+
+async function pancakeCheck(s: Record<string, string>): Promise<CheckResult> {  const res = await fetchT(`https://pos.pancake.vn/api/v1/shops?access_token=${s.access_token}&page_size=1`);
   if (!res.ok) return { health: "dead" };
   const j = await res.json().catch(() => ({}));
   return j.success === false ? { health: "dead" } : { health: "ok" };

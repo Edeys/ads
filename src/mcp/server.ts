@@ -11,7 +11,9 @@ import { findCustomTool, listCustomTools, runCustomTool, validateArgs } from "@/
 import * as meta from "./tools/meta";
 import * as tiktok from "./tools/tiktok";
 import * as google from "./tools/google";
+import * as googleData from "./tools/google-data";
 import * as pancake from "./tools/pancake";
+import * as clarity from "./tools/clarity";
 
 type KeyRow = typeof mcpKeys.$inferSelect;
 
@@ -89,6 +91,54 @@ const TOOLS: Tool[] = [
   { name: "google_ads_get_campaign_details", description: "Chi tiết chiến dịch Google Ads kèm nhóm quảng cáo", scope: "google_ads",
     inputSchema: obj({ credential_id: str("ID connection"), customer_id: str("Google Ads customer id"), campaign_id: str("ID chiến dịch") }, ["credential_id", "customer_id", "campaign_id"]),
     run: (_k, a) => google.googleAdsGetCampaignDetails(a.credential_id, a.customer_id, a.campaign_id) },
+
+  // --- Google Search Console & GA4 tools ---
+  { name: "search_console_list_sites", description: "Danh sách site đã xác minh trong Google Search Console", scope: "search_console",
+    inputSchema: obj({ credential_id: str("ID connection google_search_console") }, ["credential_id"]),
+    run: (_k, a) => googleData.searchConsoleListSites(a.credential_id) },
+  { name: "search_console_get_performance", description: "Hiệu suất tìm kiếm: impressions, clicks, CTR, vị trí trung bình theo query/page/country/device", scope: "search_console",
+    inputSchema: obj({
+      credential_id: str("ID connection google_search_console"),
+      site_url: str("Site URL đúng như trong Search Console, vd https://example.com/"),
+      start_date: str("YYYY-MM-DD (mặc định 28 ngày trước)"),
+      end_date: str("YYYY-MM-DD (mặc định hôm qua)"),
+      dimensions: { type: "array", items: { type: "string", enum: ["query", "page", "country", "device", "date"] }, description: "Tối đa 3 chiều" },
+      row_limit: { type: "number", description: "Số dòng, mặc định 100, tối đa 25000" },
+    }, ["credential_id", "site_url"]),
+    run: (_k, a) => googleData.searchConsoleQuery(a.credential_id, a.site_url, {
+      startDate: a.start_date, endDate: a.end_date, dimensions: a.dimensions, rowLimit: a.row_limit,
+    }) },
+
+  { name: "google_analytics_list_properties", description: "Danh sách property GA4 mà tài khoản Google được cấp quyền", scope: "ga4",
+    inputSchema: obj({ credential_id: str("ID connection ga4") }, ["credential_id"]),
+    run: (_k, a) => googleData.ga4ListProperties(a.credential_id) },
+  { name: "google_analytics_get_report", description: "Báo cáo GA4: phiên, người dùng, lượt xem trang, chuyển đổi theo chiều tuỳ chọn", scope: "ga4",
+    inputSchema: obj({
+      credential_id: str("ID connection ga4"),
+      property_id: str("Property ID (số), lấy từ google_analytics_list_properties"),
+      start_date: str("YYYY-MM-DD hoặc 28daysAgo (mặc định 28daysAgo)"),
+      end_date: str("YYYY-MM-DD hoặc yesterday (mặc định yesterday)"),
+      dimensions: { type: "array", items: { type: "string" }, description: "vd [\"sessionDefaultChannelGroup\"] hoặc [\"date\",\"sessionSource\"]" },
+      metrics: { type: "array", items: { type: "string" }, description: "vd [\"sessions\",\"totalUsers\",\"conversions\"]" },
+      limit: { type: "number", description: "Số dòng, mặc định 100" },
+    }, ["credential_id", "property_id"]),
+    run: (_k, a) => googleData.ga4RunReport(a.credential_id, a.property_id, {
+      startDate: a.start_date, endDate: a.end_date, dimensions: a.dimensions, metrics: a.metrics, limit: a.limit,
+    }) },
+
+  // --- Microsoft Clarity ---
+  { name: "clarity_get_live_insights", description: "Hành vi người dùng Clarity (traffic, scroll depth, rage click, dead click...) 1–3 ngày gần nhất", scope: "clarity",
+    inputSchema: obj({
+      credential_id: str("ID connection clarity"),
+      num_of_days: { type: "number", enum: [1, 2, 3], description: "Số ngày gần nhất (mặc định 1)" },
+      dimension1: str("Browser | Device | Country/Region | OS | Source | Medium | Campaign | Channel | URL"),
+      dimension2: str("Chiều thứ 2 (tuỳ chọn)"),
+      dimension3: str("Chiều thứ 3 (tuỳ chọn)"),
+    }, ["credential_id"]),
+    run: (_k, a) => clarity.clarityLiveInsights(a.credential_id, {
+      numOfDays: a.num_of_days,
+      dimensions: [a.dimension1, a.dimension2, a.dimension3].filter(Boolean),
+    }) },
 
   // --- Pancake POS & CRM tools ---
   { name: "pancake_get_shops", description: "Danh sách cửa hàng Pancake", scope: "pancake",
@@ -214,6 +264,7 @@ export async function keyInstructions(key: KeyRow): Promise<string> {
     "AdsSync Local — MCP server quản trị quảng cáo đa kênh.",
     "Quy ước: mọi tool đọc/ghi đều có prefix theo nền tảng (meta_*, tiktok_*, pancake_*, adssync_*).",
     "BẮT BUỘC gọi tool *_get_ad_accounts trước để lấy credential_id và ad_account_id.",
+    "Tool dữ liệu website: search_console_* dùng credential_id kết nối Google Search Console; google_analytics_* dùng credential_id kết nối GA4; clarity_get_live_insights dùng credential_id Clarity.",
     "Nếu tài khoản trả về nhiều hơn 1 TKQC: in danh sách và hỏi người dùng chọn, không tự lấy hết.",
     "Write tools (tắt/bật, đổi ngân sách, đăng bài, reply comment) chỉ tạo yêu cầu chờ duyệt — owner phải duyệt trong app thì lệnh mới chạy.",
     `Quyền của key: ${s.write === "true" || s.write === "all" ? "read + write (qua duyệt)" : "read-only"}.`,
