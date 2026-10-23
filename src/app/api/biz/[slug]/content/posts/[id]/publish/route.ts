@@ -3,10 +3,11 @@ import { eq, and } from "drizzle-orm";
 import { getMembership } from "@/lib/guard";
 import { decryptSecret } from "@/lib/crypto";
 import { publishToWordPress } from "@/lib/cms/wordpress";
+import { publishToCustomWebhook } from "@/lib/cms/webhook";
 
 export const runtime = "nodejs";
 
-// POST /api/biz/:slug/content/posts/:id/publish — Đẩy bài viết sang CMS đích
+// POST /api/biz/:slug/content/posts/:id/publish — Đẩy bài viết sang CMS đích (WordPress hoặc Web tự code tay qua Webhook)
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ slug: string; id: string }> }
@@ -34,7 +35,7 @@ export async function POST(
     return Response.json({ error: "post_not_found" }, { status: 404 });
   }
 
-  // 2. Lấy site
+  // 2. Lấy site đích
   const [site] = await db
     .select()
     .from(schema.sites)
@@ -45,17 +46,22 @@ export async function POST(
     return Response.json({ error: "site_not_found" }, { status: 404 });
   }
 
-  // 3. Giải mã credentials
+  // 3. Giải mã credentials nếu có
   let creds: Record<string, string> = {};
   try {
     creds = decryptSecret(site.credentialsEnc);
   } catch {
-    return Response.json({ error: "cannot_decrypt_credentials" }, { status: 500 });
+    // Không giải mã được thì để trống đối với webhook không bắt buộc
   }
 
-  // 4. Publish theo loại CMS
+  let result: { ok: boolean; remotePostId?: string; remoteUrl?: string; error?: string } = {
+    ok: false,
+    error: `Chưa hỗ trợ nền tảng: ${site.type}`,
+  };
+
+  // 4A. Nếu là WordPress
   if (site.type === "wordpress") {
-    const result = await publishToWordPress({
+    result = await publishToWordPress({
       endpointUrl: site.endpointUrl,
       username: creds.username || "",
       applicationPassword: creds.applicationPassword || creds.password || "",
@@ -65,41 +71,59 @@ export async function POST(
       slug: post.slug,
       excerpt: post.excerpt || undefined,
     });
-
-    // 5. Lưu log
-    const [log] = await db
-      .insert(schema.siteSyncLogs)
-      .values({
-        bizId: m.biz.id,
-        postId: post.id,
-        siteId: site.id,
-        remotePostId: result.remotePostId,
-        remoteUrl: result.remoteUrl,
-        syncStatus: result.ok ? "success" : "failed",
-        errorLog: result.error,
-      })
-      .returning();
-
-    if (result.ok) {
-      await db
-        .update(schema.posts)
-        .set({
-          status: publishStatus === "publish" ? "published" : "review",
-          publishedAt: publishStatus === "publish" ? new Date() : post.publishedAt,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.posts.id, post.id));
-
-      return Response.json({
-        ok: true,
-        remoteUrl: result.remoteUrl,
-        remotePostId: result.remotePostId,
-        logId: log.id,
-      });
-    } else {
-      return Response.json({ ok: false, error: result.error }, { status: 400 });
-    }
   }
 
-  return Response.json({ error: `unsupported_site_type_${site.type}` }, { status: 400 });
+  // 4B. Nếu là Web tự code tay (BĐS / Custom Web / Next.js / Laravel / Node.js)
+  else if (site.type === "webhook" || site.type === "custom") {
+    result = await publishToCustomWebhook({
+      endpointUrl: site.endpointUrl,
+      webhookSecret: creds.secret || creds.webhookSecret || creds.token,
+      title: post.title,
+      slug: post.slug,
+      contentMarkdown: post.contentMarkdown,
+      contentHtml: post.contentHtml,
+      excerpt: post.excerpt,
+      featuredImageUrl: post.featuredImageUrl,
+      seoScore: post.seoScore,
+      metaTitle: post.metaTitle,
+      metaDescription: post.metaDescription,
+      focusKeywords: post.focusKeywords,
+      schemaGraph: post.schemaGraph,
+      publishedAt: post.publishedAt || new Date(),
+    });
+  }
+
+  // 5. Lưu log đồng bộ
+  const [log] = await db
+    .insert(schema.siteSyncLogs)
+    .values({
+      bizId: m.biz.id,
+      postId: post.id,
+      siteId: site.id,
+      remotePostId: result.remotePostId,
+      remoteUrl: result.remoteUrl,
+      syncStatus: result.ok ? "success" : "failed",
+      errorLog: result.error,
+    })
+    .returning();
+
+  if (result.ok) {
+    await db
+      .update(schema.posts)
+      .set({
+        status: publishStatus === "publish" ? "published" : "review",
+        publishedAt: publishStatus === "publish" ? new Date() : post.publishedAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.posts.id, post.id));
+
+    return Response.json({
+      ok: true,
+      remoteUrl: result.remoteUrl,
+      remotePostId: result.remotePostId,
+      logId: log.id,
+    });
+  } else {
+    return Response.json({ ok: false, error: result.error }, { status: 400 });
+  }
 }
