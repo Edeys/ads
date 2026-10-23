@@ -40,6 +40,8 @@ Next.js 15 (App Router, RSC + Route Handlers)
 └── Desktop: Tauri 2 shell → spawn Node sidecar chạy Next standalone
 ```
 
+> 📖 **Xem chi tiết sơ đồ luồng, phân rã thư mục và thiết kế tại [ARCHITECTURE.md](ARCHITECTURE.md).**
+
 Vì PGlite chỉ cho **một process** mở thư mục dữ liệu, scheduler không chạy thành process
 riêng. Muốn tách worker: đặt `DATABASE_URL` trỏ tới Postgres thật rồi chạy `npm run worker`.
 

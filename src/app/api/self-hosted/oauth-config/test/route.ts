@@ -118,7 +118,7 @@ async function checkMeta(req: Request) {
     detail:
       domains.length > 0
         ? `Đã khai: ${domains.join(", ")}.`
-        : "Chưa khai App Domains. Không bắt buộc cho OAuth local, nhưng nên thêm xuanloi.me trước khi chuyển app sang Live. Meta đang tắt thay đổi app settings qua API (lỗi #10); muốn app tự cấu hình, bật Settings → Advanced → Allow API access to app settings, còn không thì khai tay trong App Dashboard.",
+        : "Chưa khai App Domains. Không bắt buộc cho OAuth local, nhưng nên thêm your-domain.com trước khi chuyển app sang Live. Meta đang tắt thay đổi app settings qua API (lỗi #10); muốn app tự cấu hình, bật Settings → Advanced → Allow API access to app settings, còn không thì khai tay trong App Dashboard.",
   });
 
   checks.push({

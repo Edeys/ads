@@ -29,7 +29,7 @@ const opts = Object.fromEntries(
 const BASE = opts.base ?? "http://127.0.0.1:3210";
 const SLUG = opts.slug ?? "biz-c1db5d8b";
 const UID = opts.uid ?? "c1db5d8b-5de6-480f-aee3-c2e3c56cb6c5";
-const EMAIL = opts.email ?? "xuanloi.me@gmail.com";
+const EMAIL = opts.email ?? "admin@example.com";
 const SECRET_FILE =
   opts["secret-file"] ?? path.join(process.env.APPDATA || process.env.HOME || ".", "AdsSync", "secret.txt");
 const CREATE_MOCK = opts["create-mock"] === "1" || opts["create-mock"] === "true";
