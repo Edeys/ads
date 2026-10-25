@@ -1,8 +1,8 @@
 // Kiểm tra các truy vấn Báo cáo (shape "group" giống API gốc) trên PGlite.
 // Chạy khi server đã dừng: npx tsx scripts/verify_reports.ts
-import { db, schema } from "../src/db";
-import { resolveRange } from "../src/lib/reports";
-import { getBizGroups, getLlmUsageV2, getOverviewV2 } from "../src/lib/report-groups";
+import { db, schema } from "../../src/db";
+import { resolveRange } from "../../src/lib/reports";
+import { getBizGroups, getLlmUsageV2, getOverviewV2 } from "../../src/lib/report-groups";
 
 const EXPECTED_GROUPS = [
   "post_triggers",

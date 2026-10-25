@@ -1,9 +1,9 @@
 // Verify Phase 19: Bộ chỉ số theo entity (mô hình thật của Done.vn).
 // Chạy khi server local ĐANG TẮT (PGlite chỉ 1 process): npx tsx scripts/verify_phase19.ts
-import { db, schema } from "../src/db";
+import { db, schema } from "../../src/db";
 import { eq } from "drizzle-orm";
-import { sha256 } from "../src/lib/crypto";
-import { ENTITIES, ENTITIES_BY_PROVIDER, ENTITY_BY_KEY, PRESET_PROVIDERS } from "../src/lib/field-catalog";
+import { sha256 } from "../../src/lib/crypto";
+import { ENTITIES, ENTITIES_BY_PROVIDER, ENTITY_BY_KEY, PRESET_PROVIDERS } from "../../src/lib/field-catalog";
 import {
   applyFieldPreset,
   countFields,
@@ -12,7 +12,7 @@ import {
   loadPresetConfig,
   normalizeConfig,
   snapshotConfig,
-} from "../src/lib/field-presets";
+} from "../../src/lib/field-presets";
 
 async function main() {
   // 1) Catalog

@@ -1,9 +1,9 @@
 // Verify Phase 20: cấu hình bảng Chỉ số quảng cáo + công thức tuỳ chỉnh.
 // Chạy khi server local ĐANG TẮT: npx tsx scripts/verify_phase20.ts
-import { db, schema } from "../src/db";
+import { db, schema } from "../../src/db";
 import { and, eq } from "drizzle-orm";
-import { validateFormula, evalFormula, formatValue } from "../src/lib/formula";
-import { AD_COLUMNS, normalizeLayout } from "../src/lib/ad-table";
+import { validateFormula, evalFormula, formatValue } from "../../src/lib/formula";
+import { AD_COLUMNS, normalizeLayout } from "../../src/lib/ad-table";
 
 function assert(cond: unknown, message: string) {
   if (!cond) throw new Error(message);

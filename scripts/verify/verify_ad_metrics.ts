@@ -1,10 +1,10 @@
 // Verify hợp đồng Ad Metrics mà không cần HTTP/auth.
 // Run (server phải STOP vì PGlite 1 process): npx tsx scripts/verify_ad_metrics.ts
-import { db, schema } from "../src/db";
+import { db, schema } from "../../src/db";
 import { eq } from "drizzle-orm";
-import { AD_CATALOG, AD_PLATFORMS, MAX_QUERY_ACCOUNTS } from "../src/lib/ad-catalog";
-import { loadSources, parseQueryBody, runQuery } from "../src/lib/ad-query";
-import { normalizeView, requiredMetrics } from "../src/lib/ad-views";
+import { AD_CATALOG, AD_PLATFORMS, MAX_QUERY_ACCOUNTS } from "../../src/lib/ad-catalog";
+import { loadSources, parseQueryBody, runQuery } from "../../src/lib/ad-query";
+import { normalizeView, requiredMetrics } from "../../src/lib/ad-views";
 
 const ok = (cond: unknown, label: string) => {
   if (!cond) {
