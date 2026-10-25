@@ -122,19 +122,13 @@ struct Launch {
     config: Vec<(String, String)>,
 }
 
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map(|a| a.port())
-        .unwrap_or(3123)
-}
-
 /// Cổng cố định cho bản desktop.
 ///
 /// OAuth (Meta/TikTok/Google) yêu cầu `redirect_uri` khớp CHÍNH XÁC với URI đã
-/// đăng ký, nên cổng phải ổn định giữa các lần mở app. Nếu cổng đang bị chiếm
-/// thì lùi về cổng ngẫu nhiên (khi đó OAuth sẽ cần đăng ký lại, các luồng
-/// nhập token thủ công vẫn chạy bình thường).
+/// đăng ký, nên cổng phải ổn định giữa các lần mở app. TUYỆT ĐỐI không rơi về
+/// cổng ngẫu nhiên: đổi cổng là Google trả `redirect_uri_mismatch`, màn hình
+/// đăng nhập quay vòng mãi mãi. Cổng bị chiếm thì xử lý ở `main()`: dùng lại
+/// server đang chạy sẵn, hoặc báo lỗi rõ ràng cho người dùng.
 const DEFAULT_PORT: u16 = 3210;
 
 fn port_free(port: u16) -> bool {
@@ -144,15 +138,12 @@ fn port_free(port: u16) -> bool {
 fn choose_port() -> u16 {
     if let Ok(custom) = std::env::var("ADSYNC_PORT") {
         if let Ok(p) = custom.trim().parse::<u16>() {
-            if p > 0 && port_free(p) {
+            if p > 0 {
                 return p;
             }
         }
     }
-    if port_free(DEFAULT_PORT) {
-        return DEFAULT_PORT;
-    }
-    free_port()
+    DEFAULT_PORT
 }
 
 fn http_get_ok(port: u16) -> bool {
@@ -286,7 +277,9 @@ fn read_or_create_secret(dir: &std::path::Path) -> String {
     let file = dir.join("secret.txt");
     if let Ok(existing) = fs::read_to_string(&file) {
         let trimmed = existing.trim().to_string();
-        if trimmed.len() >= 16 {
+        // Giữ NGUYÊN secret cũ: đổi secret là mọi cookie phiên chết và toàn bộ
+        // token connector đã mã hoá AES trong DB không giải mã được nữa.
+        if trimmed.len() >= 8 {
             return trimmed;
         }
     }
@@ -301,6 +294,10 @@ fn read_or_create_secret(dir: &std::path::Path) -> String {
             &secret_ptr_marker()
         )
     });
+    // Sao lưu bản cũ trước khi ghi đè để còn cứu dữ liệu nếu cần.
+    if file.exists() {
+        let _ = fs::copy(&file, dir.join("secret.txt.bak"));
+    }
     let _ = fs::write(&file, &secret);
     log_line(&file.with_extension("log"), "tao secret moi (32 byte hex)");
     secret
@@ -658,6 +655,47 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     app.restart();
 }
 
+/// Chờ server sẵn sàng rồi điều hướng webview vào UI.
+///
+/// Dùng chung cho cả hai trường hợp: tự spawn server mới, và dùng lại server
+/// AdsSync đang chạy sẵn trên đúng cổng đã đăng ký OAuth.
+fn navigate_when_ready(handle: tauri::AppHandle, port: u16) {
+    std::thread::spawn(move || {
+        let url = format!("http://127.0.0.1:{port}");
+        let deadline = Instant::now() + Duration::from_secs(120);
+        let started = Instant::now();
+        let mut tick: u64 = 0;
+
+        while Instant::now() < deadline {
+            if http_get_ok(port) {
+                // Seed lõi (idempotent) rồi mới mở UI.
+                let seeded = post_bootstrap(port);
+                if let Some(win) = handle.get_webview_window("main") {
+                    if let Ok(parsed) = url.parse() {
+                        let _ = win.navigate(parsed);
+                    }
+                }
+                println!("[desktop] server ready on {url} (seed: {seeded})");
+                return;
+            }
+            tick += 1;
+            if tick % 8 == 0 {
+                if let Some(win) = handle.get_webview_window("main") {
+                    let secs = started.elapsed().as_secs();
+                    let _ = win.eval(&format!("window.__adsyncTick({secs})"));
+                }
+            }
+            std::thread::sleep(Duration::from_millis(400));
+        }
+
+        if let Some(win) = handle.get_webview_window("main") {
+            let _ = win.eval(
+                "window.__adsyncError('Server không phản hồi sau 120 giây. Xem log tại %APPDATA%\\\\AdsSync\\\\server.log')",
+            );
+        }
+    });
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -696,6 +734,32 @@ fn main() {
                 }
             };
 
+            // Cổng phải cố định vì Google/Meta chỉ chấp nhận redirect URI đã
+            // đăng ký theo đúng cổng. Không bao giờ tự đổi sang cổng khác:
+            // - cổng bận nhưng đúng là AdsSync đang chạy -> dùng lại server đó;
+            // - cổng bận vì ứng dụng khác -> báo lỗi rõ ràng.
+            let port = choose_port();
+            if !port_free(port) {
+                if http_get_ok(port) {
+                    log_line(
+                        &launch.log,
+                        &format!("reuse: AdsSync dang chay san o cong {port}, khong spawn them"),
+                    );
+                    navigate_when_ready(handle.clone(), port);
+                    return Ok(());
+                }
+                show_error_dialog(
+                    "AdsSync",
+                    &format!(
+                        "Cổng {port} đang bị một ứng dụng khác chiếm.\n\n\
+                         AdsSync cần cố định cổng này vì Google/Meta chỉ chấp nhận \
+                         địa chỉ redirect đã đăng ký.\n\n\
+                         Hãy đóng ứng dụng đang dùng cổng {port} rồi mở lại AdsSync."
+                    ),
+                );
+                return Ok(());
+            }
+
             if let Err(err) = run_migrations(&launch) {
                 if let Some(win) = handle.get_webview_window("main") {
                     let _ = win.eval(&format!("window.__adsyncError({err:?})"));
@@ -703,7 +767,6 @@ fn main() {
                 return Ok(());
             }
 
-            let port = choose_port();
             let state = handle.state::<ServerState>();
             match spawn_server(&launch, port) {
                 Ok(child) => {
@@ -717,40 +780,7 @@ fn main() {
                 }
             }
 
-            std::thread::spawn(move || {
-                let url = format!("http://127.0.0.1:{port}");
-                let deadline = Instant::now() + Duration::from_secs(120);
-                let started = Instant::now();
-                let mut tick: u64 = 0;
-
-                while Instant::now() < deadline {
-                    if http_get_ok(port) {
-                        // Seed lõi (idempotent) rồi mới mở UI.
-                        let seeded = post_bootstrap(port);
-                        if let Some(win) = handle.get_webview_window("main") {
-                            if let Ok(parsed) = url.parse() {
-                                let _ = win.navigate(parsed);
-                            }
-                        }
-                        println!("[desktop] server ready on {url} (seed: {seeded})");
-                        return;
-                    }
-                    tick += 1;
-                    if tick % 8 == 0 {
-                        if let Some(win) = handle.get_webview_window("main") {
-                            let secs = started.elapsed().as_secs();
-                            let _ = win.eval(&format!("window.__adsyncTick({secs})"));
-                        }
-                    }
-                    std::thread::sleep(Duration::from_millis(400));
-                }
-
-                if let Some(win) = handle.get_webview_window("main") {
-                    let _ = win.eval(
-                        "window.__adsyncError('Server không phản hồi sau 120 giây. Xem log tại %APPDATA%\\\\AdsSync\\\\server.log')",
-                    );
-                }
-            });
+            navigate_when_ready(handle.clone(), port);
 
             Ok(())
         })

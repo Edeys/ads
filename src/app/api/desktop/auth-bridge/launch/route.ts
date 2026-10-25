@@ -2,8 +2,10 @@
 //
 // NextAuth v5 không nhận GET /api/auth/signin/<provider> — phải POST kèm csrfToken.
 // Trang này tự lấy csrfToken rồi submit form, đúng như trang đăng nhập mặc định.
+import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { handlers } from "@/lib/auth";
 import { authBaseUrl } from "@/lib/self-hosted-config";
 
 import { isLoopbackRequest, loopbackForbidden } from "@/lib/request-origin";
@@ -48,6 +50,26 @@ export async function GET(req: Request) {
     ? `${origin}/api/auth/signin/google?login_hint=${encodeURIComponent(email)}&prompt=consent`
     : `${origin}/api/auth/signin/${provider}`;
 
+  // Lấy CSRF token NGAY TRÊN SERVER rồi nhúng vào form (và forward cookie cho
+  // trình duyệt). Trước đây trang tự fetch('/api/auth/csrf') bằng JS: người dùng
+  // bấm nút trước khi fetch xong là form gửi thiếu token, Auth.js trả MissingCSRF
+  // và hiện "Server error — There is a problem with the server configuration".
+  const csrfReqHeaders = new Headers();
+  const incomingCookie = req.headers.get("cookie");
+  if (incomingCookie) csrfReqHeaders.set("cookie", incomingCookie);
+  const csrfRes = await handlers.GET(
+    new NextRequest(`${origin}/api/auth/csrf`, { headers: csrfReqHeaders }),
+  );
+  const csrfJson = (await csrfRes.json().catch(() => ({}))) as { csrfToken?: string };
+  const csrfToken = csrfJson.csrfToken ?? "";
+  const csrfCookies =
+    typeof (csrfRes.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie === "function"
+      ? (csrfRes.headers as unknown as { getSetCookie: () => string[] }).getSetCookie()
+      : [];
+
+  const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
+  for (const cookie of csrfCookies) headers.append("set-cookie", cookie);
+
   return new Response(
     `<!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><title>Đăng nhập AdsSync</title>
@@ -59,17 +81,26 @@ button{margin-top:20px;background:#2563eb;color:#fff;border:0;padding:10px 20px;
 <h1>Đang chuyển tới ${providerLabel}…</h1>
 <p>Nếu không tự chuyển, bấm nút bên dưới.</p>
 <form id="f" method="POST" action="${esc(action)}">
-  <input type="hidden" name="csrfToken" id="csrf" />
+  <input type="hidden" name="csrfToken" id="csrf" value="${esc(csrfToken)}" />
   <input type="hidden" name="callbackUrl" value="${esc(callback)}" />
-  <button type="submit">Tiếp tục đăng nhập ${providerLabel}</button>
+  <button type="submit" id="btn">Tiếp tục đăng nhập ${providerLabel}</button>
 </form>
+<p id="note" style="margin-top:12px;color:#b45309"></p>
 </div>
 <script>
-fetch('/api/auth/csrf').then(function(r){return r.json()}).then(function(d){
-  document.getElementById('csrf').value = d.csrfToken;
-  document.getElementById('f').submit();
-}).catch(function(){ /* để user bấm nút */ });
+(function () {
+  var tokenEl = document.getElementById('csrf');
+  var note = document.getElementById('note');
+  if (tokenEl && tokenEl.value) {
+    document.getElementById('f').submit();
+    return;
+  }
+  var btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.style.opacity = '.5';
+  note.textContent = 'Chưa chuẩn bị được phiên đăng nhập. Hãy tải lại trang này (Ctrl+R).';
+})();
 </script></body></html>`,
-    { headers: { "content-type": "text/html; charset=utf-8" } },
+    { headers },
   );
 }

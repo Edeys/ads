@@ -3,8 +3,23 @@
 // nên worker không thể chạy thành process riêng khi server đang giữ thư mục dữ liệu.
 import { startInProcessWorker } from "@/lib/worker-inproc";
 import { isLoopbackRequest } from "@/lib/request-origin";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export const dynamic = "force-dynamic";
+
+// Sidecar desktop chạy `node server.js` nên không có npm_package_version —
+// đọc thẳng package.json cạnh server (standalone) để báo đúng phiên bản.
+function appVersion(): string {
+  if (process.env.npm_package_version) return process.env.npm_package_version;
+  try {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
+    if (pkg?.version) return String(pkg.version);
+  } catch {
+    /* bỏ qua — dùng fallback */
+  }
+  return "0.2.0";
+}
 
 export async function GET(req: Request) {
   if (process.env.ADSYNC_INPROC_WORKER === "1") {
@@ -15,7 +30,7 @@ export async function GET(req: Request) {
   return Response.json({
     ok: true,
     app: "adsync",
-    version: process.env.npm_package_version ?? "0.1.0",
+    version: appVersion(),
     worker: process.env.ADSYNC_INPROC_WORKER === "1",
     uptime_s: Math.round(process.uptime()),
     ...(local
