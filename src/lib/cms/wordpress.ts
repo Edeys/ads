@@ -1,3 +1,5 @@
+import { checkOutboundUrl } from "@/lib/net-guard";
+
 export interface WordPressPublishInput {
   endpointUrl: string; // ví dụ: https://example.com/wp-json/wp/v2 hoặc https://example.com
   username: string;
@@ -25,6 +27,9 @@ export async function publishToWordPress(input: WordPressPublishInput): Promise<
   }
 
   const targetUrl = `${base}/posts`;
+  // Chặn SSRF trước khi gửi kèm Application Password (không cho quét nội bộ).
+  const guard = await checkOutboundUrl(targetUrl);
+  if (!guard.ok) return { ok: false, error: guard.error };
   const authHeader = `Basic ${Buffer.from(`${input.username}:${input.applicationPassword.replace(/\s+/g, "")}`).toString("base64")}`;
 
   try {

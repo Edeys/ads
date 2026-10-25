@@ -44,13 +44,30 @@ type FeedChange = {
 };
 
 export async function POST(req: Request) {
-  const raw = await req.text();
   const appSecret = process.env.META_APP_SECRET;
   const signature = req.headers.get("x-hub-signature-256") ?? "";
   if (!appSecret) {
     // Không cấu hình app secret thì không thể xác thực — từ chối thay vì tin payload.
     return Response.json({ ok: false, error: "webhook_not_configured" }, { status: 503 });
   }
+  // Đọc body có TRẦN (1MB): payload Meta thật chỉ vài KB — đọc không giới hạn
+  // trước khi xác thực là chỗ chết bộ nhớ cho request ẩn danh.
+  const MAX_WEBHOOK_BYTES = 1_000_000;
+  const reader = req.body?.getReader();
+  if (!reader) return Response.json({ ok: false, error: "empty_body" }, { status: 400 });
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_WEBHOOK_BYTES) {
+      try { await reader.cancel(); } catch { /* đã hủy được gì thì hủy */ }
+      return Response.json({ ok: false, error: "payload_too_large" }, { status: 413 });
+    }
+    chunks.push(value);
+  }
+  const raw = Buffer.concat(chunks);
   const expected = `sha256=${createHmac("sha256", appSecret).update(raw).digest("hex")}`;
   const a = Buffer.from(signature);
   const b = Buffer.from(expected);
@@ -60,7 +77,7 @@ export async function POST(req: Request) {
 
   let body: any;
   try {
-    body = JSON.parse(raw);
+    body = JSON.parse(raw.toString("utf8"));
   } catch {
     return Response.json({ ok: true }); // payload lạ vẫn phải 200 để Meta không retry
   }

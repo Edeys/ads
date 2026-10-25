@@ -90,9 +90,11 @@ export async function POST(req: Request) {
   try { body = await req.json(); } catch { return Response.json(rpcErr(null, -32700, "Parse error"), { status: 400 }); }
 
   // Giới hạn theo từng key: agent chạy vòng lặp lỗi không được đốt API provider.
+  // Batch JSON-RPC tính theo SỐ MESSAGE trong mảng — không cho gói N call vào 1 hit.
   // Mặc định 240 request/phút cho mỗi key, chỉnh bằng MCP_RATE_LIMIT_PER_MIN.
   const max = Number(process.env.MCP_RATE_LIMIT_PER_MIN ?? 240);
-  const rl = rateLimit(`mcp:${key.id}`, Number.isFinite(max) && max > 0 ? max : 240, 60_000);
+  const weight = Array.isArray(body) ? body.length : 1;
+  const rl = rateLimit(`mcp:${key.id}`, Number.isFinite(max) && max > 0 ? max : 240, 60_000, Math.min(weight, 10_000));
   if (!rl.ok) {
     return Response.json(rpcErr(body?.id, -32000, `rate_limited: thử lại sau ${rl.retryAfter}s`), {
       status: 429,

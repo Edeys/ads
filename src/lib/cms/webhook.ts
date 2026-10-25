@@ -1,3 +1,5 @@
+import { checkOutboundUrl } from "@/lib/net-guard";
+
 export interface WebhookPublishInput {
   endpointUrl: string; // URL webhook trên web BĐS: ví dụ https://bds-cuaban.com/api/webhooks/adsync
   webhookSecret?: string; // Khóa bảo mật để web BĐS xác thực
@@ -24,6 +26,10 @@ export interface WebhookPublishResult {
 
 export async function publishToCustomWebhook(input: WebhookPublishInput): Promise<WebhookPublishResult> {
   const targetUrl = input.endpointUrl.trim();
+  // Cùng luật SSRF với custom tools: endpoint do người dùng đặt, phải chặn
+  // loopback / mạng nội bộ / metadata cloud.
+  const guard = await checkOutboundUrl(targetUrl);
+  if (!guard.ok) return { ok: false, error: guard.error };
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "User-Agent": "AdsSync-Headless-CMS/1.0",

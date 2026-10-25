@@ -69,7 +69,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
   if (b.secret !== undefined) patch.secret = b.secret || null;
   if (b.events !== undefined) patch.events = (b.events as string[]).filter((e) => EVENT_CATALOG.some((c) => c.event === e));
   if (b.enabled !== undefined) patch.enabled = Boolean(b.enabled);
-  await db.update(schema.outboundWebhooks).set(patch).where(eq(schema.outboundWebhooks.id, b.id));
+  await db.update(schema.outboundWebhooks).set(patch).where(and(eq(schema.outboundWebhooks.id, b.id), eq(schema.outboundWebhooks.bizId, m.biz.id)));
   return Response.json({ ok: true });
 }
 

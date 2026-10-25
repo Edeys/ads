@@ -607,9 +607,13 @@ fn open_external(url: String) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
+        // KHÔNG dùng `cmd /C start`: cmd.exe diễn giải &, |, ^ trong URL thành
+        // lệnh shell → argument injection từ webview. rundll32 nhận URL thẳng
+        // làm argv (không qua shell) nên ký tự đặc biệt vô hại, trình xử lý
+        // giao thức mặc định vẫn mở đúng trình duyệt hệ thống.
         use std::os::windows::process::CommandExt;
-        let mut cmd = Command::new("cmd");
-        cmd.args(["/C", "start", "", &url]);
+        let mut cmd = Command::new("rundll32");
+        cmd.args(["url.dll,FileProtocolHandler", &url]);
         cmd.creation_flags(0x0800_0000);
         cmd.spawn().map_err(|e| e.to_string())?;
     }

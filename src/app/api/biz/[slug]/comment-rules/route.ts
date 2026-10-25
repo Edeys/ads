@@ -1,7 +1,7 @@
 // Comment auto-reply rules — CRUD (fork full-feature).
 // Rule: keywords khớp comment → reply công khai / ẩn / private reply / Telegram / bắn n8n.
 import { db, schema } from "@/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { getMembership } from "@/lib/guard";
 import { logActivity } from "@/lib/audit";
 
@@ -61,7 +61,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
   if (b.actions !== undefined) patch.actions = b.actions;
   if (b.enabled !== undefined) patch.enabled = Boolean(b.enabled);
   if (b.priority !== undefined) patch.priority = Number(b.priority);
-  await db.update(schema.commentRules).set(patch).where(eq(schema.commentRules.id, b.id));
+  await db.update(schema.commentRules).set(patch).where(and(eq(schema.commentRules.id, b.id), eq(schema.commentRules.bizId, m.biz.id)));
   await logActivity({ bizId: m.biz.id, actorId: m.member.userId, action: "comment_rule.update", objectType: "comment_rule", objectId: b.id });
   return Response.json({ ok: true });
 }
@@ -72,7 +72,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ slug:
   if (!m) return Response.json({ error: "forbidden" }, { status: 403 });
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return Response.json({ error: "Thiếu id" }, { status: 400 });
-  await db.delete(schema.commentRules).where(eq(schema.commentRules.id, id));
+  await db.delete(schema.commentRules).where(and(eq(schema.commentRules.id, id), eq(schema.commentRules.bizId, m.biz.id)));
   await logActivity({ bizId: m.biz.id, actorId: m.member.userId, action: "comment_rule.delete", objectType: "comment_rule", objectId: id });
   return Response.json({ ok: true });
 }

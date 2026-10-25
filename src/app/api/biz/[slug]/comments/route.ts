@@ -63,7 +63,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       const r = await replyToComment(credentialId, body.commentId, body.message.trim(), isReply);
       await db.update(schema.commentEvents).set({
         ruleAction: "manual_replied", replyText: body.message.trim(), processedAt: new Date(),
-      }).where(eq(schema.commentEvents.commentId, body.commentId));
+      }).where(and(eq(schema.commentEvents.commentId, body.commentId), eq(schema.commentEvents.bizId, m.biz.id)));
       await logActivity({ bizId: m.biz.id, actorId: m.member.userId, action: "comment.reply", objectType: "comment", objectId: body.commentId });
       emitEvent(m.biz.id, "comment.replied", { commentId: body.commentId, replyText: body.message, byRule: false }).catch(() => {});
       return Response.json({ ok: true, replyId: r.id });
@@ -72,7 +72,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     if (action === "hide" || action === "unhide") {
       if (!body.commentId) return Response.json({ error: "Thiếu commentId" }, { status: 400 });
       await setCommentHidden(credentialId, body.commentId, action === "hide");
-      await db.update(schema.commentEvents).set({ hidden: action === "hide" }).where(eq(schema.commentEvents.commentId, body.commentId));
+      await db.update(schema.commentEvents).set({ hidden: action === "hide" }).where(and(eq(schema.commentEvents.commentId, body.commentId), eq(schema.commentEvents.bizId, m.biz.id)));
       await logActivity({ bizId: m.biz.id, actorId: m.member.userId, action: `comment.${action}`, objectType: "comment", objectId: body.commentId });
       return Response.json({ ok: true });
     }
@@ -87,7 +87,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     if (action === "private_reply") {
       if (!body.commentId || !body.message?.trim()) return Response.json({ error: "Thiếu commentId/message" }, { status: 400 });
       const r = await privateReply(credentialId, body.commentId, body.message.trim());
-      await db.update(schema.commentEvents).set({ privateReplySent: true, ruleAction: "manual_private_replied" }).where(eq(schema.commentEvents.commentId, body.commentId));
+      await db.update(schema.commentEvents).set({ privateReplySent: true, ruleAction: "manual_private_replied" }).where(and(eq(schema.commentEvents.commentId, body.commentId), eq(schema.commentEvents.bizId, m.biz.id)));
       await logActivity({ bizId: m.biz.id, actorId: m.member.userId, action: "comment.private_reply", objectType: "comment", objectId: body.commentId });
       return Response.json({ ok: true, recipient: r.recipient_id ?? null });
     }

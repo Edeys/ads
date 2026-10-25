@@ -3,17 +3,19 @@
 type Bucket = { count: number; resetAt: number };
 const buckets = new Map<string, Bucket>();
 
-export function rateLimit(key: string, max: number, windowMs: number): { ok: true } | { ok: false; retryAfter: number } {
+export function rateLimit(key: string, max: number, windowMs: number, weight = 1): { ok: true } | { ok: false; retryAfter: number } {
   const now = Date.now();
-  const b = buckets.get(key);
-  if (!b || b.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return { ok: true };
+  // Weight = số "hit" lần gọi này chiếm (VD: batch JSON-RPC N message = N hit).
+  // Bucket mới tính từ 0 TRƯỚC khi check — batch 300 vào limit 240 phải bị
+  // chặn ngay từ request đầu, không được "cho qua rồi mới đếm".
+  const w = Math.max(1, Math.floor(weight));
+  const fresh = !buckets.get(key) || buckets.get(key)!.resetAt <= now;
+  const count = fresh ? 0 : buckets.get(key)!.count;
+  if (count + w > max) {
+    const resetAt = fresh ? now + windowMs : buckets.get(key)!.resetAt;
+    return { ok: false, retryAfter: Math.max(1, Math.ceil((resetAt - now) / 1000)) };
   }
-  if (b.count >= max) {
-    return { ok: false, retryAfter: Math.max(1, Math.ceil((b.resetAt - now) / 1000)) };
-  }
-  b.count += 1;
+  buckets.set(key, { count: count + w, resetAt: fresh ? now + windowMs : buckets.get(key)!.resetAt });
   return { ok: true };
 }
 

@@ -1,8 +1,11 @@
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
 
 const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
-if (!secret && process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
-  throw new Error("Thiếu NEXTAUTH_SECRET — không thể mã hoá credential an toàn.");
+// Throw ở MỌI môi trường (trừ lúc build): fallback key đoán được ("dev-secret")
+// đồng nghĩa mất toàn bộ mã hoá credential — dev chạy thiếu secret phải thấy
+// lỗi rõ ngay thay vì chạy với khoá predictable.
+if (!secret && process.env.NEXT_PHASE !== "phase-production-build") {
+  throw new Error("Thiếu NEXTAUTH_SECRET/AUTH_SECRET — không thể mã hoá credential an toàn. Đặt secret trong .env rồi chạy lại.");
 }
 const key = createHash("sha256").update(secret || "dev-secret").digest();
 
