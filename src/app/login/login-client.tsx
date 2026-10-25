@@ -58,6 +58,27 @@ export function LoginClient({
     }
   }
 
+  // NextAuth v5 chỉ nhận POST /api/auth/signin/:provider kèm CSRF — thẻ <a>
+  // GET sẽ bị từ chối với lỗi Configuration. Tự lấy CSRF rồi submit form POST.
+  async function webLogin(p: Provider) {
+    setBusy(true);
+    setStatus(`Đang chuyển tới ${LABEL[p]}…`);
+    try {
+      const c = await (await fetch("/api/auth/csrf", { credentials: "include" })).json();
+      const f = document.createElement("form");
+      f.method = "POST";
+      f.action = `/api/auth/signin/${p}`;
+      const i1 = Object.assign(document.createElement("input"), { name: "csrfToken", value: c.csrfToken });
+      const i2 = Object.assign(document.createElement("input"), { name: "callbackUrl", value: callbackUrl });
+      f.append(i1, i2);
+      document.body.appendChild(f);
+      f.submit();
+    } catch (e: any) {
+      setBusy(false);
+      setStatus(`Không bắt đầu được đăng nhập: ${e?.message ?? e}`);
+    }
+  }
+
   const providers: Provider[] = chatGptEnabled ? ["google", "openai"] : ["google"];
 
   return (
@@ -86,14 +107,16 @@ export function LoginClient({
         ) : (
           <div>
             {providers.map((p) => (
-              <a
+              <button
                 key={p}
-                href={`/api/auth/signin/${p}?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-                className="mb-2 block w-full rounded-md bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+                onClick={() => webLogin(p)}
+                disabled={busy}
+                className="mb-2 w-full rounded-md bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                Đăng nhập với {LABEL[p]}
-              </a>
+                {busy ? "Đang xử lý…" : `Đăng nhập với ${LABEL[p]}`}
+              </button>
             ))}
+            {status && <p className="mt-3 text-xs text-zinc-500">{status}</p>}
           </div>
         )}
       </div>
