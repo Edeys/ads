@@ -67,3 +67,7 @@ media/
 dev.log
 dev-out.log
 driz
+
+# Ghi chú nội bộ — không public
+docs/internal/
+scripts/internal/

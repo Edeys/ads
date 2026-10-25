@@ -116,8 +116,8 @@ Sau khi build lại code, dừng tiến trình cũ rồi chạy lại (`serve.mj
 
 ```bash
 curl http://localhost:3000/api/health
-node scripts/verify_mcp.mjs                 # discovery + 401 + health
-MCP_KEY=mk_... node scripts/verify_mcp.mjs  # + initialize / tools/list / tools/call
+node scripts/verify/verify_mcp.mjs                 # discovery + 401 + health
+MCP_KEY=mk_... node scripts/verify/verify_mcp.mjs  # + initialize / tools/list / tools/call
 ```
 
 ---
