@@ -1,7 +1,7 @@
 // Provider catalog — pure data, client-safe (không import crypto/db).
 // spec §5.2: 5 nhóm (ads/sales/ai/notify/other) + "Sắp ra mắt".
 
-export type ProviderGroup = "ads" | "sales" | "ai" | "notify" | "other";
+export type ProviderGroup = "ads" | "social" | "sales" | "ai" | "notify" | "other";
 export type AuthType = "oauth" | "token" | "apikey" | "service_account" | "bot" | "url_only";
 
 export interface ProviderField {
@@ -26,6 +26,7 @@ export interface ProviderDef {
 
 export const GROUP_LABELS: Record<ProviderGroup, string> = {
   ads: "Quảng cáo",
+  social: "Mạng xã hội",
   sales: "Bán hàng",
   ai: "AI",
   notify: "Thông báo",
@@ -59,6 +60,35 @@ export const PROVIDERS: ProviderDef[] = [
     ],
   },
   { id: "openai_ads", label: "OpenAI Ads", group: "ads", auth: "apikey", comingSoon: true, fields: [] },
+
+  // ---- Mạng xã hội (đăng bài đa đích — docs/ADAPTERS.md) ----
+  // Instagram KHÔNG cần connection riêng: đích IG lấy từ page Meta đã có
+  // (health check lưu sẵn instagram{id,username} trong meta.pages).
+  {
+    id: "x_twitter", label: "X (Twitter)", group: "social", auth: "oauth",
+    hint: "Đăng ký app tại developer.x.com, bật User authentication settings (OAuth 2.0, PKCE). Điền X_CLIENT_ID/X_CLIENT_SECRET rồi bấm kết nối — hoặc dán Bearer user token.",
+    fields: [{ key: "access_token", label: "Access Token (Bearer)", secret: true, required: true, target: "secret" }],
+  },
+  {
+    id: "linkedin", label: "LinkedIn", group: "social", auth: "oauth",
+    hint: "Đăng ký app tại developer.linkedin.com, thêm sản phẩm 'Share on LinkedIn'. Điền LINKEDIN_CLIENT_ID/SECRET rồi kết nối.",
+    fields: [{ key: "access_token", label: "Access Token", secret: true, required: true, target: "secret" }],
+  },
+  {
+    id: "tiktok", label: "TikTok (đăng bài)", group: "social", auth: "oauth",
+    hint: "Dùng app TikTok hiện có (TIKTOK_APP_ID/SECRET), thêm quyền Content Posting (video.publish). Cần duyệt app mới đăng thật được.",
+    fields: [{ key: "access_token", label: "Access Token", secret: true, required: true, target: "secret" }],
+  },
+  {
+    id: "threads", label: "Threads", group: "social", auth: "oauth",
+    hint: "Đăng ký app Threads tại developers.threads.com (scope threads_content_publish). Điền THREADS_CLIENT_ID/SECRET rồi kết nối.",
+    fields: [{ key: "access_token", label: "Access Token", secret: true, required: true, target: "secret" }],
+  },
+  {
+    id: "pinterest", label: "Pinterest", group: "social", auth: "oauth",
+    hint: "Đăng ký app tại developers.pinterest.com (quyền pins:write, boards:read). Điền PINTEREST_CLIENT_ID/SECRET rồi kết nối — board sẽ hiện khi soạn bài.",
+    fields: [{ key: "access_token", label: "Access Token", secret: true, required: true, target: "secret" }],
+  },
 
   // ---- Bán hàng ----
   {

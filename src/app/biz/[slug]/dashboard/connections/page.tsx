@@ -2,6 +2,7 @@
 import { db, schema } from "@/db";
 import { eq, desc } from "drizzle-orm";
 import { getMembership } from "@/lib/guard";
+import { defaultScopeKeys, scopeString } from "@/lib/oauth-scopes";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { ConnectionsClient } from "./client";
@@ -47,6 +48,16 @@ export default async function ConnectionsPage({
       googleOAuthReady={Boolean((process.env.GOOGLE_ADS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID) && (process.env.GOOGLE_ADS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET)) || isSelfHosted}
       isSelfHosted={isSelfHosted}
       appUrl={appUrl}
+      socialReady={{
+        x_twitter: Boolean(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET),
+        linkedin: Boolean(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET),
+        tiktok: Boolean(process.env.TIKTOK_APP_ID && process.env.TIKTOK_APP_SECRET),
+        threads: Boolean((process.env.THREADS_CLIENT_ID || process.env.META_APP_ID) && (process.env.THREADS_CLIENT_SECRET || process.env.META_APP_SECRET)),
+        pinterest: Boolean(process.env.PINTEREST_CLIENT_ID && process.env.PINTEREST_CLIENT_SECRET),
+      }}
+      metaAppId={process.env.META_APP_ID ?? null}
+      metaScope={scopeString("meta", defaultScopeKeys("meta"))}
+      mockReady={process.env.ADSYNC_MOCK !== "0"}
       notice={
         sp.error
           ? {

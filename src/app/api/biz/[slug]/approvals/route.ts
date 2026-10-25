@@ -26,6 +26,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   if (!ap || ap.status !== "pending") return Response.json({ error: "not_found_or_resolved" }, { status: 404 });
   const [key] = await db.select().from(schema.mcpKeys).where(eq(schema.mcpKeys.id, ap.keyId)).limit(1);
   if (!key || key.bizId !== m.biz.id) return Response.json({ error: "forbidden" }, { status: 403 });
+  // Recheck trạng thái key NGAY LÚC THỰC THI: key đã bị revoke/hết hạn thì
+  // approval pending của nó không chạy nữa, dù owner bấm duyệt.
+  if (key.status === "revoked" || (key.expiresAt && key.expiresAt < new Date())) {
+    return Response.json({ error: "key đã bị thu hồi hoặc hết hạn — không thực thi được approval này" }, { status: 403 });
+  }
 
   if (action === "reject") {
     await db.update(schema.mcpApprovals).set({ status: "rejected", resolvedBy: m.member.userId, resolvedAt: new Date() }).where(eq(schema.mcpApprovals.id, id));

@@ -30,6 +30,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const { slug } = await params;
   const m = await getMembership(slug);
   if (!m) return Response.json({ error: "forbidden" }, { status: 403 });
+  // Tạo/sửa/revoke key là quyền riêng — chặn ở API, không chỉ ẩn UI.
+  if (m.member.role !== "owner" && !(m.member.permissions as string[]).includes("mcp_keys.access")) {
+    return Response.json({ error: "thiếu quyền mcp_keys.access" }, { status: 403 });
+  }
   const body = await req.json().catch(() => ({}));
   if (!body.name) return Response.json({ error: "Thiếu tên" }, { status: 400 });
 

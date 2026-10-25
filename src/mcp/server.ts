@@ -8,6 +8,8 @@ import { applyFieldPreset, describePreset, providerLabel } from "@/lib/field-pre
 import { ENTITY_BY_KEY } from "@/lib/field-catalog";
 import { listPostComments, listPagePosts, replyToComment, setCommentHidden, publishPagePost } from "@/lib/meta-page";
 import { findCustomTool, listCustomTools, runCustomTool, validateArgs } from "@/lib/custom-tools";
+import { growthOverview } from "@/lib/growth";
+import { listPublishDestinations } from "@/lib/publish-destinations";
 import * as meta from "./tools/meta";
 import * as tiktok from "./tools/tiktok";
 import * as google from "./tools/google";
@@ -193,6 +195,45 @@ const TOOLS: Tool[] = [
       return rows;
     } },
 
+  // --- Growth overview: kéo số liệu 28 ngày qua từ mọi nguồn đã kết nối ---
+  { name: "adssync_growth_overview", description: "Tổng quan tăng trưởng 28 ngày qua: Search Console (clicks, impressions, vị trí), GA4 (sessions, users), Clarity, Meta Ads (chi tiêu, clicks). Mỗi nguồn ghi rõ khoảng ngày, tài khoản và trạng thái — nguồn lỗi không làm mất nguồn khác", scope: "*",
+    inputSchema: obj({}),
+    run: (k) => growthOverview(k.bizId) },
+
+  // --- Social đa mạng: agent xem đích → soạn → xin duyệt đăng/lịch ---
+  { name: "adssync_list_publish_destinations", description: "Danh sách đích đăng bài khả dụng của Biz: Facebook Page, Instagram, X, LinkedIn, TikTok, Threads, board Pinterest — kèm connection_id và ref_id dùng cho social_publish_post / social_schedule_post", scope: "*",
+    inputSchema: obj({}),
+    run: (k) => listPublishDestinations(k.bizId) },
+  { name: "social_publish_post", description: "Đăng bài lên NHIỀU mạng cùng lúc (tạo approval — owner duyệt trong app mới chạy). Gọi adssync_list_publish_destinations trước để lấy connection_id/ref_id. Ảnh qua photos (URL công khai)", scope: "write", write: true,
+    inputSchema: obj({
+      targets: { type: "array", maxItems: 10, description: "Các đích đăng", items: { type: "object", properties: {
+        type: { type: "string", enum: ["meta_page", "instagram", "x_twitter", "linkedin", "tiktok", "threads", "pinterest"], description: "Loại đích" },
+        connection_id: { type: "string", description: "ID connection từ adssync_list_publish_destinations" },
+        ref_id: { type: "string", description: "page/IG/board id — bỏ trống với X/LinkedIn/TikTok/Threads để tự dò" },
+        label: { type: "string", description: "Tên hiển thị trong phiếu duyệt" },
+      }, required: ["type", "connection_id"] } },
+      message: str("Nội dung bài viết"),
+      link_url: str("Link đính kèm (tuỳ chọn)"),
+      photos: { type: "array", items: { type: "string" }, description: "URL ảnh công khai — BẮT BUỘC với Instagram/TikTok/Pinterest" },
+      video_url: str("URL video công khai (tuỳ chọn, Instagram/Facebook)"),
+    }, ["targets", "message"]),
+    run: async (k, a) => { const [ap] = await db.insert(mcpApprovals).values({ keyId: k.id, tool: "social_publish_post", args: a }).returning(); return { status: "pending_approval", approval_id: ap.id, note: "Owner duyệt trong màn Phê duyệt thì bài mới đăng từng đích" }; } },
+  { name: "social_schedule_post", description: "Lên lịch đăng bài đa mạng (tạo approval). Worker tự đăng đúng giờ, từng đích độc lập — đích lỗi không chặn đích khác", scope: "write", write: true,
+    inputSchema: obj({
+      targets: { type: "array", maxItems: 10, items: { type: "object", properties: {
+        type: { type: "string", enum: ["meta_page", "instagram", "x_twitter", "linkedin", "tiktok", "threads", "pinterest"] },
+        connection_id: { type: "string" },
+        ref_id: { type: "string" },
+        label: { type: "string" },
+      }, required: ["type", "connection_id"] } },
+      message: str("Nội dung bài viết"),
+      link_url: str("Link đính kèm (tuỳ chọn)"),
+      photos: { type: "array", items: { type: "string" }, description: "URL ảnh công khai" },
+      video_url: str("URL video (tuỳ chọn)"),
+      scheduled_at: str("ISO datetime giờ VN, tối thiểu 10 phút nữa"),
+    }, ["targets", "message", "scheduled_at"]),
+    run: async (k, a) => { const [ap] = await db.insert(mcpApprovals).values({ keyId: k.id, tool: "social_schedule_post", args: a }).returning(); return { status: "pending_approval", approval_id: ap.id }; } },
+
   // --- Write tools (Approval Gate) ---
   { name: "meta_toggle_ads", description: "Bật / tắt chiến dịch, nhóm, quảng cáo", scope: "write", write: true,
     inputSchema: obj({ credential_id: str("ID connection"), target_id: str("ID target"), status: str("ACTIVE | PAUSED") }, ["credential_id", "target_id", "status"]),
@@ -323,6 +364,7 @@ export async function callTool(key: KeyRow, name: string, args: unknown) {
   const t = TOOLS.find((x) => x.name === name);
   if (!t) return callCustomTool(key, name, args);
   if (!keyAllowed(key, t)) throw new Error(`key không có quyền tool ${name}`);
+  await assertConnectionInBiz(args, key.bizId, name);
   const t0 = Date.now();
   try {
     const result = await t.run(key, args);
@@ -334,6 +376,16 @@ export async function callTool(key: KeyRow, name: string, args: unknown) {
     db.insert(mcpCallLogs).values({ keyId: key.id, tool: name, latencyMs: Date.now() - t0, ok: false }).catch(() => {});
     throw e;
   }
+}
+
+// Mọi tool nhận credential_id phải dùng connection thuộc cùng workspace với
+// key — chặn key của biz A đọc/ghi connection của biz B qua ID đoán được.
+async function assertConnectionInBiz(args: unknown, bizId: string, toolName: string) {
+  const credId = (args as Record<string, unknown> | null)?.credential_id;
+  if (typeof credId !== "string" || !credId) return;
+  const [conn] = await db.select({ bizId: connections.bizId }).from(connections).where(eq(connections.id, credId)).limit(1);
+  if (!conn) throw new Error(`[${toolName}] credential_id không tồn tại: ${credId}`);
+  if (conn.bizId !== bizId) throw new Error(`[${toolName}] credential_id không thuộc workspace của key này`);
 }
 
 // Custom tool: chạy qua manifest HTTP. Tool có side effect (requiresApproval) thì
@@ -374,6 +426,11 @@ async function callCustomTool(key: KeyRow, name: string, rawArgs: unknown) {
 
 // Thực thi approval đã duyệt — gọi từ approvals route.
 export async function executeApproval(tool: string, args: any, ctx?: { bizId?: string }): Promise<unknown> {
+  // Recheck lúc THỰC THI (không chỉ lúc agent tạo): connection phải còn thuộc
+  // đúng workspace — chống approval stale sau khi connection bị chuyển/xoá.
+  if (ctx?.bizId && typeof args?.credential_id === "string" && args.credential_id) {
+    await assertConnectionInBiz(args, ctx.bizId, `approval:${tool}`);
+  }
   if (tool.startsWith("custom:")) {
     const id = tool.slice("custom:".length);
     const { db: schemaDb, schema: sch } = await import("@/db");
@@ -404,27 +461,74 @@ export async function executeApproval(tool: string, args: any, ctx?: { bizId?: s
       photos: args.photos ?? [], videoUrl: args.video_url ?? undefined,
     });
     if (ctx?.bizId) {
-      const { scheduledPosts } = await import("@/db/schema");
-      await db.insert(scheduledPosts).values({
+      const { scheduledPosts, scheduledPostTargets } = await import("@/db/schema");
+      const [row] = await db.insert(scheduledPosts).values({
         bizId: ctx.bizId,
-        connectionId: args.credential_id, pageId: String(args.page_id),
         message: String(args.message), linkUrl: args.link_url ?? null,
         photos: args.photos ?? [], videoUrl: args.video_url ?? null,
         mode: "now", status: "published", postId: r.postId, publishedAt: new Date(),
+      }).returning();
+      await db.insert(scheduledPostTargets).values({
+        scheduledPostId: row.id, type: "meta_page",
+        connectionId: args.credential_id, refId: String(args.page_id),
+        status: "published", postId: r.postId, publishedAt: new Date(),
       });
     }
     return r;
   }
   if (tool === "meta_schedule_post") {
     if (!ctx?.bizId) throw new Error("meta_schedule_post cần ctx.bizId");
-    const { scheduledPosts } = await import("@/db/schema");
+    const { scheduledPosts, scheduledPostTargets } = await import("@/db/schema");
     const [row] = await db.insert(scheduledPosts).values({
       bizId: ctx.bizId,
-      connectionId: args.credential_id, pageId: String(args.page_id),
       message: String(args.message), photos: args.photos ?? [],
       mode: "schedule", status: "scheduled", scheduledAt: new Date(args.scheduled_at),
     }).returning();
+    await db.insert(scheduledPostTargets).values({
+      scheduledPostId: row.id, type: "meta_page",
+      connectionId: args.credential_id, refId: String(args.page_id),
+    });
     return { scheduled_post_id: row.id, scheduledAt: row.scheduledAt, note: "Worker sẽ tự đăng đúng giờ" };
+  }
+  if (tool === "social_publish_post" || tool === "social_schedule_post") {
+    if (!ctx?.bizId) throw new Error(`${tool} cần ctx.bizId`);
+    const { scheduledPosts, scheduledPostTargets } = await import("@/db/schema");
+    const raw = (Array.isArray(args.targets) ? args.targets : []).slice(0, 10);
+    if (!raw.length) throw new Error("Thiếu targets");
+    // Recheck lúc THỰC THI: mọi connection của từng đích phải thuộc workspace duyệt.
+    for (const t of raw) {
+      const [c] = await db.select({ bizId: connections.bizId }).from(connections)
+        .where(eq(connections.id, String(t.connection_id))).limit(1);
+      if (!c || c.bizId !== ctx.bizId) throw new Error(`Đích ${t.type ?? "?"}: connection không thuộc workspace — từ chối`);
+    }
+    const schedule = tool === "social_schedule_post";
+    let scheduledAt: Date | null = null;
+    if (schedule) {
+      scheduledAt = new Date(args.scheduled_at);
+      if (Number.isNaN(scheduledAt.getTime())) throw new Error("scheduled_at sai định dạng ISO");
+      if (scheduledAt.getTime() <= Date.now()) throw new Error("scheduled_at phải ở tương lai");
+    }
+    const [row] = await db.insert(scheduledPosts).values({
+      bizId: ctx.bizId,
+      message: String(args.message ?? ""), linkUrl: args.link_url ?? null,
+      photos: (args.photos ?? []).slice(0, 10), videoUrl: args.video_url ?? null,
+      mode: schedule ? "schedule" : "now",
+      status: schedule ? "scheduled" : "publishing",
+      scheduledAt,
+    }).returning();
+    await db.insert(scheduledPostTargets).values(raw.map((t: any) => ({
+      scheduledPostId: row.id, type: String(t.type ?? "meta_page"),
+      connectionId: String(t.connection_id), refId: String(t.ref_id ?? ""), label: t.label ?? null,
+    })));
+    if (schedule) {
+      return { scheduled_post_id: row.id, scheduledAt: row.scheduledAt, targets: raw.length, note: "Worker tự đăng từng đích đúng giờ" };
+    }
+    const { runAllPendingTargets } = await import("@/lib/post-targets");
+    const { results, rollup } = await runAllPendingTargets(row);
+    return {
+      status: rollup?.status ?? "publishing",
+      targets: results.map((x: any) => ({ refId: x.target.refId, label: x.target.label, ok: x.result.ok, postId: x.result.postId ?? null, error: x.result.error ?? null })),
+    };
   }
   throw new Error(`tool không hỗ trợ: ${tool}`);
 }

@@ -79,6 +79,7 @@ const navFor = (slug: string): Group[] => [
     label: "Phân tích",
     Icon: IconPulse,
     items: [
+      { label: "Xem trước dữ liệu", href: `/biz/${slug}/dashboard/growth` },
       { label: "Báo cáo", href: `/biz/${slug}/dashboard/reports` },
       { label: "Nhật ký", href: `/biz/${slug}/dashboard/activity` },
     ],

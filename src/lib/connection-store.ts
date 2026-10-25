@@ -10,7 +10,12 @@ export type OAuthProvider =
   | "google_ads"
   | "tiktok_ads"
   | "google_search_console"
-  | "ga4";
+  | "ga4"
+  | "x_twitter"
+  | "linkedin"
+  | "tiktok"
+  | "threads"
+  | "pinterest";
 
 export async function saveOAuthConnection(opts: {
   bizId: string;

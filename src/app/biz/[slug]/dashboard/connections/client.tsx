@@ -40,6 +40,7 @@ const HEALTH: Record<string, { label: string; bg: string; color: string; dot: st
 
 const GROUP_ICON: Record<ProviderGroup, (p: { size?: number }) => React.ReactElement> = {
   ads: IconMegaphone,
+  social: IconMegaphone,
   sales: IconLayers,
   ai: IconSparkle,
   notify: IconBell,
@@ -79,8 +80,12 @@ export function ConnectionsClient({
   tiktokOAuthReady,
   googleOAuthReady,
   isSelfHosted,
+  socialReady,
   notice,
   appUrl,
+  metaAppId,
+  metaScope,
+  mockReady,
   connections,
 }: {
   slug: string;
@@ -91,6 +96,10 @@ export function ConnectionsClient({
   isSelfHosted?: boolean;
   notice?: { kind: "ok" | "error"; title: string; detail: string } | null;
   appUrl: string;
+  socialReady?: Record<string, boolean>;
+  metaAppId: string | null;
+  metaScope: string;
+  mockReady: boolean;
   connections: ConnRow[];
 }) {
   const router = useRouter();
@@ -107,7 +116,7 @@ export function ConnectionsClient({
   const [scopeConnId, setScopeConnId] = useState<string | null>(null);
 
   const stats = useMemo(() => {
-    const s: Record<ProviderGroup, number> = { ads: 0, sales: 0, ai: 0, notify: 0, other: 0 };
+    const s: Record<ProviderGroup, number> = { ads: 0, social: 0, sales: 0, ai: 0, notify: 0, other: 0 };
     for (const c of connections) {
       const g = providerById(c.provider)?.group ?? "other";
       s[g] += 1;
@@ -135,7 +144,7 @@ export function ConnectionsClient({
     return true;
   });
 
-  const groups: ProviderGroup[] = ["ads", "sales", "ai", "notify", "other"];
+  const groups: ProviderGroup[] = ["ads", "social", "sales", "ai", "notify", "other"];
   const grouped = groups
     .map((g) => ({ group: g, rows: visible.filter((c) => (providerById(c.provider)?.group ?? "other") === g) }))
     .filter((g) => g.rows.length > 0);
@@ -200,10 +209,15 @@ export function ConnectionsClient({
               </Dialog.Trigger>
               <AddConnectionDialog
                 slug={slug}
+                origin={origin}
                 metaOAuthReady={metaOAuthReady}
                 tiktokOAuthReady={Boolean(tiktokOAuthReady)}
                 googleOAuthReady={Boolean(googleOAuthReady)}
                 isSelfHosted={Boolean(isSelfHosted)}
+                socialReady={socialReady}
+                metaAppId={metaAppId}
+                metaScope={metaScope}
+                mockReady={mockReady}
                 onDone={() => {
                   setOpen(false);
                   router.refresh();
@@ -996,31 +1010,113 @@ const OAUTH_CONNECT: Record<string, { path: string; label: string; provider?: st
   google_ads: { path: "google", label: "Google Ads", provider: "google_ads" },
   google_search_console: { path: "google", label: "Google", provider: "search_console" },
   ga4: { path: "google", label: "Google", provider: "ga4" },
+  x_twitter: { path: "social/x_twitter", label: "X (Twitter)" },
+  linkedin: { path: "social/linkedin", label: "LinkedIn" },
+  tiktok: { path: "social/tiktok", label: "TikTok" },
+  threads: { path: "social/threads", label: "Threads" },
+  pinterest: { path: "social/pinterest", label: "Pinterest" },
+};
+
+// --- Facebook JS SDK: popup "click là kết nối" (không rời trang) ---
+declare global {
+  interface Window {
+    FB?: any;
+    fbAsyncInit?: () => void;
+  }
+}
+
+let fbSdkPromise: Promise<void> | null = null;
+
+function loadFbSdk(appId: string): Promise<void> {
+  if (window.FB?.getAuthResponse) return Promise.resolve();
+  if (fbSdkPromise) return fbSdkPromise;
+  fbSdkPromise = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      fbSdkPromise = null;
+      reject(new Error("Facebook SDK không phản hồi"));
+    }, 10_000);
+    window.fbAsyncInit = () => {
+      clearTimeout(timer);
+      window.FB!.init({ appId, cookie: true, xfbml: false, version: "v21.0" });
+      resolve();
+    };
+    const s = document.createElement("script");
+    s.src = "https://connect.facebook.net/en_US/sdk.js";
+    s.async = true;
+    s.defer = true;
+    s.onerror = () => {
+      clearTimeout(timer);
+      fbSdkPromise = null;
+      reject(new Error("Không tải được Facebook SDK"));
+    };
+    document.head.appendChild(s);
+  });
+  return fbSdkPromise;
+}
+
+function fbLogin(appId: string, scope: string): Promise<{ authResponse: { accessToken: string; userID: string; grantedScopes?: string } }> {
+  return loadFbSdk(appId).then(
+    () =>
+      new Promise((resolve, reject) => {
+        window.FB.login(
+          (r: any) => {
+            if (r.status === "connected" && r.authResponse?.accessToken) resolve(r);
+            else reject(new Error(r.status === "not_authorized" ? "Bạn chưa cấp quyền cho ứng dụng." : "Đăng nhập Facebook chưa hoàn tất."));
+          },
+          { scope, return_scopes: true },
+        );
+      }),
+  );
+}
+
+type SelectPayload = {
+  pending_id: string;
+  profile: { id: string; name?: string };
+  ad_accounts: { id: string; name: string; status?: number; currency?: string; connected?: boolean }[];
+  pages: { id: string; name: string }[];
+  quota: { used: number; limit: number | null; remaining: number | null; enforced: boolean };
 };
 
 function AddConnectionDialog({
   slug,
+  origin,
   metaOAuthReady,
   tiktokOAuthReady,
   googleOAuthReady,
   isSelfHosted,
+  socialReady,
+  metaAppId,
+  metaScope,
+  mockReady,
   onDone,
 }: {
   slug: string;
+  origin: string;
   metaOAuthReady: boolean;
   tiktokOAuthReady: boolean;
   googleOAuthReady: boolean;
   isSelfHosted: boolean;
+  socialReady?: Record<string, boolean>;
+  metaAppId: string | null;
+  metaScope: string;
+  mockReady: boolean;
   onDone: () => void;
 }) {
   const [picked, setPicked] = useState<ProviderDef | null>(null);
+  const [phase, setPhase] = useState<"pick" | "config" | "select">("pick");
   const [name, setName] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [manualOpen, setManualOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sdkBusy, setSdkBusy] = useState(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [sel, setSel] = useState<SelectPayload | null>(null);
+  const [acc, setAcc] = useState<Set<string>>(new Set());
+  const [pg, setPg] = useState<Set<string>>(new Set());
 
   const oauth = picked ? OAUTH_CONNECT[picked.id] : undefined;
+  const socialNetworks = ["x_twitter", "linkedin", "tiktok", "threads", "pinterest"];
   const oauthReady =
     picked?.id === "meta_ads"
       ? metaOAuthReady
@@ -1028,10 +1124,16 @@ function AddConnectionDialog({
         ? tiktokOAuthReady
         : picked?.id === "google_ads" || picked?.id === "google_search_console" || picked?.id === "ga4"
           ? googleOAuthReady
-          : false;
+          : socialNetworks.includes(picked?.id ?? "")
+            ? Boolean(socialReady?.[picked!.id])
+            : false;
   const showManualForm = !oauthReady || manualOpen;
+  // Meta có 2 đường nhanh: popup FB SDK (khi đã cấu hình app) và sandbox (khi
+  // ADSYNC_MOCK bật). Không có đường nào thì giữ nút redirect như cũ.
+  const metaPopupReady = picked?.id === "meta_ads" && metaOAuthReady && Boolean(metaAppId);
+  const metaSandboxReady = picked?.id === "meta_ads" && mockReady;
 
-  const groups: ProviderGroup[] = ["ads", "sales", "ai", "notify", "other"];
+  const groups: ProviderGroup[] = ["ads", "social", "sales", "ai", "notify", "other"];
 
   async function submit() {
     if (!picked) return;
@@ -1051,15 +1153,197 @@ function AddConnectionDialog({
     onDone();
   }
 
+  function enterSelect(j: SelectPayload) {
+    const available = j.ad_accounts.filter((a) => !a.connected);
+    // Chọn sẵn các tài khoản chưa kết nối (nếu quota có hạn thì chỉ chọn trong
+    // phạm vi còn lại); page mặc định chọn hết vì không tính quota.
+    const cap = j.quota.enforced && j.quota.remaining != null ? Math.max(0, j.quota.remaining) : available.length;
+    setAcc(new Set(available.slice(0, cap).map((a) => a.id)));
+    setPg(new Set(j.pages.map((p) => p.id)));
+    setSel(j);
+    setPhase("select");
+  }
+
+  async function postMetaToken(bodyExtra: Record<string, unknown>) {
+    setSdkBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/connect/meta/token`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug, name: name || undefined, ...bodyExtra }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? "Không bắt đầu được kết nối Meta.");
+      enterSelect(j as SelectPayload);
+    } catch (e: any) {
+      setError(e.message ?? "Lỗi kết nối Meta.");
+    } finally {
+      setSdkBusy(false);
+    }
+  }
+
+  async function startMetaPopup() {
+    if (!metaAppId) return;
+    setSdkBusy(true);
+    setError("");
+    try {
+      const r = await fbLogin(metaAppId, metaScope);
+      await postMetaToken({
+        access_token: r.authResponse.accessToken,
+        user_id: r.authResponse.userID,
+        granted_scopes: r.authResponse.grantedScopes ?? "",
+      });
+    } catch (e: any) {
+      setError(`${e.message ?? "Popup Facebook không mở được."} Có thể dùng nút “Mở trang đăng nhập đầy đủ” bên dưới.`);
+    } finally {
+      setSdkBusy(false);
+    }
+  }
+
+  async function confirmSelection() {
+    if (!sel || acc.size === 0) return;
+    setConfirmBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/connect/meta/confirm`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          pending_id: sel.pending_id,
+          account_ids: [...acc],
+          page_ids: [...pg],
+          name: name || undefined,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? "Không lưu được kết nối.");
+      onDone();
+    } catch (e: any) {
+      setError(e.message ?? "Lỗi khi lưu kết nối.");
+      if (/hết hạn/i.test(e.message ?? "")) {
+        setPhase("config");
+        setSel(null);
+      }
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
+
   return (
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
       <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[min(720px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[18px] bg-[var(--card)] p-6 shadow-xl">
         <Dialog.Title className="mb-4 text-[18px] font-bold" style={{ color: "var(--ink-900)" }}>
-          Thêm kết nối
+          {phase === "select" ? "Chọn tài khoản cần dùng" : "Thêm kết nối"}
         </Dialog.Title>
 
-        {!picked ? (
+        {phase === "select" && sel ? (
+          <div>
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-[12.5px]" style={{ color: "var(--ink-500)" }}>
+              <span className="font-semibold" style={{ color: "var(--ink-800)" }}>
+                {sel.profile?.name || "Facebook"}
+              </span>
+              {sel.quota.enforced && sel.quota.limit != null && (
+                <span className="rounded-full px-2.5 py-0.5 text-[11.5px]" style={{ background: "var(--surface-3)" }}>
+                  Tài khoản QC: đang dùng {sel.quota.used}/{sel.quota.limit}
+                </span>
+              )}
+              <span className="rounded-full px-2.5 py-0.5 text-[11.5px]" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>
+                Đã chọn {acc.size} ad account
+              </span>
+            </div>
+
+            <div className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--ink-400)" }}>
+              Tài khoản quảng cáo
+            </div>
+            <div className="mb-4 max-h-[240px] space-y-1.5 overflow-y-auto pr-1">
+              {sel.ad_accounts.map((a) => {
+                const on = acc.has(a.id);
+                const blockQuota = sel.quota.enforced && sel.quota.remaining != null && !on && acc.size >= sel.quota.remaining + sel.ad_accounts.filter((x) => x.connected).length;
+                return (
+                  <label
+                    key={a.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-[13px]"
+                    style={{ borderColor: on ? "var(--brand)" : "var(--line)", background: on ? "var(--brand-soft)" : "transparent" }}
+                  >
+                    <input type="checkbox" checked={on} disabled={blockQuota} onChange={() => {
+                      const next = new Set(acc);
+                      if (on) next.delete(a.id); else next.add(a.id);
+                      setAcc(next);
+                    }} />
+                    <span className="flex-1">
+                      <span className="font-medium" style={{ color: "var(--ink-900)" }}>{a.name}</span>
+                      <span className="ml-2 text-[11.5px]" style={{ color: "var(--ink-400)" }}>
+                        {a.id} {a.currency ? `· ${a.currency}` : ""}
+                      </span>
+                    </span>
+                    {a.connected && (
+                      <span className="rounded-full px-2 py-0.5 text-[10.5px]" style={{ background: "var(--ok-bg)", color: "var(--ok-ink)" }}>
+                        Đã kết nối
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+              {sel.ad_accounts.length === 0 && (
+                <div className="rounded-xl px-3 py-3 text-[12.5px]" style={{ background: "var(--warn-bg)", color: "var(--warn-ink)" }}>
+                  Token chưa thấy tài khoản quảng cáo nào. Kiểm tra quyền ads_management trong app Facebook.
+                </div>
+              )}
+            </div>
+
+            {sel.pages.length > 0 && (
+              <>
+                <div className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--ink-400)" }}>
+                  Trang Facebook ({sel.pages.length})
+                </div>
+                <div className="mb-4 max-h-[160px] space-y-1.5 overflow-y-auto pr-1">
+                  {sel.pages.map((p) => {
+                    const on = pg.has(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className="flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-[12.5px]"
+                        style={{ borderColor: on ? "var(--brand)" : "var(--line)", background: on ? "var(--brand-soft)" : "transparent" }}
+                      >
+                        <input type="checkbox" checked={on} onChange={() => {
+                          const next = new Set(pg);
+                          if (on) next.delete(p.id); else next.add(p.id);
+                          setPg(next);
+                        }} />
+                        <span style={{ color: "var(--ink-900)" }}>{p.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {error && (
+              <div className="mb-3 rounded-xl px-3 py-2 text-[12.5px]" style={{ background: "var(--danger-bg)", color: "var(--danger-ink)" }}>
+                {error}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setPhase("config");
+                  setSel(null);
+                  setError("");
+                }}
+                className="ui-btn"
+              >
+                ← Quay lại
+              </button>
+              <button onClick={confirmSelection} disabled={confirmBusy || acc.size === 0} className="ui-btn-primary">
+                {confirmBusy ? "Đang lưu…" : `Xác nhận kết nối (${acc.size})`}
+              </button>
+            </div>
+          </div>
+        ) : !picked ? (
           <div className="space-y-5">
             {groups.map((g) => (
               <div key={g}>
@@ -1073,6 +1357,7 @@ function AddConnectionDialog({
                       disabled={p.comingSoon}
                       onClick={() => {
                         setPicked(p);
+                        setPhase("config");
                         setName("");
                         setValues({});
                         setError("");
@@ -1098,6 +1383,7 @@ function AddConnectionDialog({
             <button
               onClick={() => {
                 setPicked(null);
+                setPhase("pick");
                 setManualOpen(false);
                 setError("");
               }}
@@ -1115,10 +1401,44 @@ function AddConnectionDialog({
               </p>
             )}
 
+            {(metaPopupReady || metaSandboxReady) && (
+              <div className="mb-4 rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--surface-2)" }}>
+                <p className="mb-2.5 text-[12.5px]" style={{ color: "var(--ink-500)" }}>
+                  {metaPopupReady
+                    ? "Popup sẽ hiện lên để bạn đăng nhập và cấp quyền — sau đó chọn tài khoản cần dùng. Không rời khỏi trang này."
+                    : "Chạy thử toàn bộ luồng kết nối với dữ liệu giả (sandbox)."}
+                </p>
+                {metaPopupReady && (
+                  <button
+                    type="button"
+                    onClick={startMetaPopup}
+                    disabled={sdkBusy}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-[13px] font-semibold"
+                    style={{ borderColor: "var(--brand)", background: "var(--brand-soft)", color: "var(--brand)" }}
+                  >
+                    {sdkBusy ? "Đang mở popup…" : "Kết nối với Facebook"}
+                  </button>
+                )}
+                {metaSandboxReady && (
+                  <button
+                    type="button"
+                    onClick={() => postMetaToken({ mock: true })}
+                    disabled={sdkBusy}
+                    className={`${metaPopupReady ? "mt-2 " : ""}w-full text-center text-[11.5px] underline`}
+                    style={{ color: "var(--ink-400)" }}
+                  >
+                    Thử nhanh bằng dữ liệu sandbox
+                  </button>
+                )}
+              </div>
+            )}
+
             {oauth && oauthReady && (
               <div className="mb-4 rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--surface-2)" }}>
                 <p className="mb-2.5 text-[12.5px]" style={{ color: "var(--ink-500)" }}>
-                  Không cần tạo access token. Bấm nút bên dưới, đăng nhập {oauth.label} trong trình duyệt và đồng ý quyền.
+                  {picked.id === "meta_ads" && metaPopupReady
+                    ? "Popup bị chặn hoặc đăng nhập không thành công? Dùng đường đầy đủ bên dưới."
+                    : "Không cần tạo access token. Bấm nút bên dưới, đăng nhập " + oauth.label + " trong trình duyệt và đồng ý quyền."}
                 </p>
                 <button
                   type="button"
@@ -1132,7 +1452,7 @@ function AddConnectionDialog({
                   className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-[13px] font-semibold"
                   style={{ borderColor: "var(--brand)", background: "var(--brand-soft)", color: "var(--brand)" }}
                 >
-                  Kết nối với {oauth.label} →
+                  Mở trang đăng nhập {oauth.label} →
                 </button>
                 <button
                   type="button"

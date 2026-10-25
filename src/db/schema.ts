@@ -68,6 +68,7 @@ export const invites = pgTable("invites", {
 // ---------- Connections (provider credentials) ----------
 export const PROVIDER_GROUPS = {
   ads: ["meta_ads", "tiktok_ads", "google_ads", "openai_ads"],
+  social: ["x_twitter", "linkedin", "tiktok", "threads", "pinterest"],
   sales: ["pancake_pos", "pancake_crm", "pancake_chat", "nhanhvn", "sapo", "shopify", "woocommerce", "getfly", "odoo"],
   ai: ["gemini", "openai", "anthropic", "deepseek", "openai_compatible"],
   notify: ["telegram", "zalo_bot"],
@@ -381,21 +382,39 @@ export const commentEvents = pgTable("comment_events", {
 export const scheduledPosts = pgTable("scheduled_posts", {
   id: uuid("id").defaultRandom().primaryKey(),
   bizId: uuid("biz_id").references(() => bizs.id, { onDelete: "cascade" }).notNull(),
-  connectionId: uuid("connection_id").references(() => connections.id, { onDelete: "cascade" }).notNull(),
-  pageId: varchar("page_id", { length: 40 }).notNull(),
+  // Legacy đơn đích Meta (trước thời đa đích) — bản ghi mới để null và dùng
+  // scheduled_post_targets bên dưới. Giữ cột cho backfill/đọc bản cũ.
+  connectionId: uuid("connection_id").references(() => connections.id, { onDelete: "cascade" }),
+  pageId: varchar("page_id", { length: 40 }),
   message: text("message").notNull(),
   linkUrl: text("link_url"),
   photos: jsonb("photos").$type<string[]>().default([]).notNull(), // public URLs ảnh
   videoUrl: text("video_url"),
   mode: varchar("mode", { length: 20 }).default("schedule").notNull(), // now|schedule|draft
   scheduledAt: timestamp("scheduled_at"), // >= 10 phút & <= 30 ngày (giới hạn Meta)
-  status: varchar("status", { length: 20 }).default("scheduled").notNull(), // draft|scheduled|publishing|published|failed|cancelled
+  status: varchar("status", { length: 20 }).default("scheduled").notNull(), // draft|scheduled|publishing|published|partial|failed|cancelled
   postId: varchar("post_id", { length: 60 }),
   publishError: text("publish_error"),
   aiPolicyCheck: jsonb("ai_policy_check").$type<{ ok: boolean; reason?: string; model?: string }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   publishedAt: timestamp("published_at"),
 }, (t) => [index("scheduled_posts_biz").on(t.bizId, t.status, t.scheduledAt)]);
+
+// Một bài đăng → nhiều đích. Mỗi đích tự mang trạng thái: đích lỗi không kéo
+// chết đích khác. type=meta_page sẵn sàng; instagram/cms_* là slot cho bước sau.
+export const scheduledPostTargets = pgTable("scheduled_post_targets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  scheduledPostId: uuid("scheduled_post_id").references(() => scheduledPosts.id, { onDelete: "cascade" }).notNull(),
+  type: varchar("type", { length: 30 }).default("meta_page").notNull(), // meta_page|instagram|cms_wordpress|cms_webhook
+  connectionId: uuid("connection_id").references(() => connections.id, { onDelete: "cascade" }),
+  refId: varchar("ref_id", { length: 80 }).notNull(), // pageId / IG id / site id
+  label: varchar("label", { length: 160 }),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending|publishing|published|failed|cancelled
+  postId: varchar("post_id", { length: 60 }), // id bài đăng trên mạng xã hội sau khi đăng
+  error: text("error"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [index("sp_targets_post").on(t.scheduledPostId, t.status)]);
 
 // ---------- n8n / outbound webhooks (event bus ra ngoài) ----------
 export const outboundWebhooks = pgTable("outbound_webhooks", {

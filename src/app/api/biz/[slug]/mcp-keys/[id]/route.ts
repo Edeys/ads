@@ -9,6 +9,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ slug: 
   const { slug, id } = await params;
   const m = await getMembership(slug);
   if (!m) return Response.json({ error: "forbidden" }, { status: 403 });
+  if (m.member.role !== "owner" && !(m.member.permissions as string[]).includes("mcp_keys.access")) {
+    return Response.json({ error: "thiếu quyền mcp_keys.access" }, { status: 403 });
+  }
   const body = await req.json().catch(() => ({}));
   const upd: Record<string, unknown> = {};
   if (body.name !== undefined) upd.name = body.name;
@@ -25,6 +28,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ slug:
   const { slug, id } = await params;
   const m = await getMembership(slug);
   if (!m) return Response.json({ error: "forbidden" }, { status: 403 });
+  if (m.member.role !== "owner" && !(m.member.permissions as string[]).includes("mcp_keys.access")) {
+    return Response.json({ error: "thiếu quyền mcp_keys.access" }, { status: 403 });
+  }
   const [k] = await db.delete(schema.mcpKeys)
     .where(and(eq(schema.mcpKeys.id, id), eq(schema.mcpKeys.bizId, m.biz.id))).returning();
   if (!k) return Response.json({ error: "not_found" }, { status: 404 });

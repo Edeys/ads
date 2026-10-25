@@ -2,10 +2,11 @@
 // 1. commentWatchTick: poll comment page đang theo dõi (fallback khi chưa có webhook Meta)
 // 2. postSchedulerTick: publish các bài lên lịch đến giờ (đăng bài tự động)
 import { db } from "../../db";
-import { pageSubscriptions, scheduledPosts } from "../../db/schema";
+import { pageSubscriptions, scheduledPosts, scheduledPostTargets } from "../../db/schema";
 import { eq, and, lte } from "drizzle-orm";
-import { listPagePosts, listPostComments, publishPagePost } from "../../lib/meta-page";
+import { listPagePosts, listPostComments } from "../../lib/meta-page";
 import { processIncomingComment } from "../../lib/comment-engine";
+import { runAllPendingTargets } from "../../lib/post-targets";
 import { emitEvent } from "../../lib/events";
 import { logActivity } from "../../lib/audit";
 
@@ -44,7 +45,8 @@ export async function commentWatchTick() {
   return { pages: subs.length, scannedComments, newComments };
 }
 
-// Đăng bài tự động: mọi bài status=scheduled đến giờ → publish.
+// Đăng bài tự động: bài status=scheduled đến giờ → publish TỪNG ĐÍCH.
+// Mỗi đích tự chạy, tự mang trạng thái — đích lỗi không chặn đích khác.
 export async function postSchedulerTick() {
   const now = new Date();
   const due = await db
@@ -55,34 +57,36 @@ export async function postSchedulerTick() {
   let published = 0, failed = 0;
   for (const post of due) {
     await db.update(scheduledPosts).set({ status: "publishing" }).where(eq(scheduledPosts.id, post.id));
-    try {
-      const r = await publishPagePost(post.connectionId, post.pageId, {
-        message: post.message,
-        linkUrl: post.linkUrl ?? undefined,
-        photos: (post.photos as string[]) ?? [],
-        videoUrl: post.videoUrl ?? undefined,
+
+    // Bài cũ thời đơn đích (chưa có target): sinh bù 1 target từ pageId legacy.
+    const existing = await db.select().from(scheduledPostTargets)
+      .where(eq(scheduledPostTargets.scheduledPostId, post.id));
+    if (!existing.length && post.pageId) {
+      await db.insert(scheduledPostTargets).values({
+        scheduledPostId: post.id, type: "meta_page",
+        connectionId: post.connectionId, refId: post.pageId,
       });
-      await db.update(scheduledPosts).set({
-        status: "published", postId: r.postId, publishedAt: new Date(), publishError: null,
-      }).where(eq(scheduledPosts.id, post.id));
-      await logActivity({
-        bizId: post.bizId, action: "publisher.auto_publish",
-        objectType: "scheduled_post", objectId: post.id,
-        detail: { pageId: post.pageId, postId: r.postId },
-      });
-      emitEvent(post.bizId, "post.published", {
-        source: "scheduler", scheduledPostId: post.id, pageId: post.pageId, postId: r.postId,
-      }).catch(() => {});
-      published++;
-    } catch (e: any) {
-      await db.update(scheduledPosts).set({
-        status: "failed", publishError: e?.message ?? "publish failed",
-      }).where(eq(scheduledPosts.id, post.id));
-      emitEvent(post.bizId, "post.publish_failed", {
-        scheduledPostId: post.id, error: e?.message ?? "publish failed",
-      }).catch(() => {});
-      failed++;
     }
+
+    const { results, rollup } = await runAllPendingTargets(post);
+    for (const x of results) {
+      if (x.result.ok) {
+        published++;
+        emitEvent(post.bizId, "post.published", {
+          source: "scheduler", scheduledPostId: post.id, pageId: x.target.refId, postId: x.result.postId,
+        }).catch(() => {});
+      } else {
+        failed++;
+        emitEvent(post.bizId, "post.publish_failed", {
+          scheduledPostId: post.id, pageId: x.target.refId, error: x.result.error,
+        }).catch(() => {});
+      }
+    }
+    await logActivity({
+      bizId: post.bizId, action: "publisher.auto_publish",
+      objectType: "scheduled_post", objectId: post.id,
+      detail: { status: rollup?.status ?? "publishing", published: results.filter((x) => x.result.ok).length, failed: results.filter((x) => !x.result.ok).length },
+    });
   }
   return { due: due.length, published, failed };
 }
